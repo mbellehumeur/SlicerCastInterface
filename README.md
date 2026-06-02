@@ -9,7 +9,7 @@
 
 ## Overview
 
-Cast Interface is a 3D Slicer extension focused on desktop integration workflows for healthcare applications.
+Cast Interface is a 3D Slicer extension focused on desktop integration workflows for healthcare providers and researchers.
 
 
 ---
