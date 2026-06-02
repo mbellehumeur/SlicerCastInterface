@@ -217,3 +217,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Cast hub packaging artifacts
+CastInterface/cast_api/cast-hub.zip
+
+# VolView SPA build output (served by cast_api at /volview-client)
+CastInterface/cast_api/volview-client/

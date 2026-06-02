@@ -46,6 +46,8 @@ The hub is the server that distributes the messages and handles the data transfe
 
 ![hub portal](CastInterface/docs/images/hub-admin.png)
 
+Online example:  
+https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/
 
 #### Resource servers: 
 The resource server tab provides a way for other 3D slicer extensions to connect to the hub and provide their resource to the users.  Resource servers subscribe to all user topics for dicom/nifti events and send back results to the user through the hub. Developers can setup a hub in the cloud and connect the extension running on their local machine to the cloud.  The instance in their dev environment is therefore available to their test parters in the cloud without having to deploy their code.

@@ -469,6 +469,34 @@ resources_dir = os.path.join(base_dir, "Resources")
 if os.path.exists(resources_dir):
     app.mount("/static", StaticFiles(directory=resources_dir), name="static")
 
+# Optional VolView SPA hosting under /volview-client
+volview_client_dir = os.path.join(base_dir, "volview-client")
+volview_index = os.path.join(volview_client_dir, "index.html")
+if os.path.isdir(volview_client_dir):
+    assets_dir = os.path.join(volview_client_dir, "assets")
+    if os.path.isdir(assets_dir):
+        app.mount(
+            "/volview-client/assets",
+            StaticFiles(directory=assets_dir),
+            name="volview_client_assets",
+        )
+
+    @app.get("/volview-client")
+    async def volview_client_root():
+        # Ensure relative ./assets paths resolve under /volview-client/.
+        return RedirectResponse(url="/volview-client/")
+
+    @app.get("/volview-client/{full_path:path}")
+    async def volview_client_spa(full_path: str):
+        requested_file = os.path.join(volview_client_dir, full_path)
+        if os.path.isfile(requested_file):
+            return FileResponse(requested_file)
+        if os.path.isfile(volview_index):
+            return FileResponse(volview_index)
+        raise HTTPException(
+            status_code=404, detail="volview-client/index.html not found"
+        )
+
 
 def _subscription_topic_matches(sub_topic: str, event_topic: str) -> bool:
     """True when a subscription should receive publishes for ``event_topic``."""
@@ -3168,15 +3196,8 @@ def main():
     print(f"Hub API endpoint: http://{args.host}:{args.port}/api/hub/")
     print("")
     print("Test endpoints:")
-    print(f"  GET    http://{args.host}:{args.port}/")
     print(f"  GET    http://{args.host}:{args.port}/api/hub/admin (admin status page)")
     print(f"  POST   http://{args.host}:{args.port}/api/hub/")
-    print(f"  DELETE http://{args.host}:{args.port}/api/hub/")
-    print(f"  GET    http://{args.host}:{args.port}/api/hub/conference-topics")
-    print(f"  GET    http://{args.host}:{args.port}/api/hub/conference")
-    print(f"  POST   http://{args.host}:{args.port}/api/hub/conference")
-    print(f"  DELETE http://{args.host}:{args.port}/api/hub/conference")
-    print(f"  GET    http://{args.host}:{args.port}/api/hub/conference-client")
     print("")
     print("OAuth (mock):")
     print(f"  POST   http://{args.host}:{args.port}/oauth/authorize")

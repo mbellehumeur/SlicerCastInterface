@@ -390,6 +390,21 @@
             opacity: 0.6;
             cursor: not-allowed;
         }
+        .hub-settings-launch {
+            width: 100%;
+            margin-top: 8px;
+            padding: 10px 12px;
+            border: 1px solid var(--border-btn);
+            border-radius: 4px;
+            background: var(--bg-input);
+            color: var(--text-primary);
+            font-size: 14px;
+            cursor: pointer;
+            box-sizing: border-box;
+        }
+        .hub-settings-launch:hover {
+            background: var(--bg-muted-hover);
+        }
         h2 button {
             background-color: var(--bg-btn-primary);
             color: var(--text-on-primary);
@@ -830,6 +845,39 @@
             color: var(--text-on-primary);
             border: 1px solid var(--danger-border);
         }
+        .about-dialog .about-meta {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+        .about-dialog .about-links {
+            margin: 16px 0 0;
+        }
+        .about-dialog .about-links button {
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            background-color: var(--bg-btn);
+            color: var(--text-primary);
+            border: 1px solid var(--border-btn);
+        }
+        .about-dialog .about-links button:hover {
+            background-color: var(--bg-btn-hover);
+        }
+        .about-danger-zone {
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+        }
+        .about-danger-zone p {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+        .about-danger-zone .btn-confirm-reset {
+            width: 100%;
+            padding: 10px 16px;
+        }
     </style>
     <script>
         (function () {
@@ -976,8 +1024,10 @@
                                 <option value="polka-dots">Polka dots</option>
                             </select>
                         </div>
-                        <button type="button" id="serverResetBtn" class="hub-settings-danger"
-                                onclick="resetHub()">Reset server</button>
+                        <button type="button" id="openVolViewClientBtn" class="hub-settings-launch"
+                                onclick="openVolViewClient()">Open VolView</button>
+                        <button type="button" id="hubAboutBtn" class="hub-settings-launch"
+                                onclick="showAboutHub()">About</button>
                     </div>
                 </div>
             </div>
@@ -1823,7 +1873,12 @@
             loadSnapshot();
         }
 
-        async function resetHub() {
+        function openVolViewClient() {
+            const url = new URL('/volview-client/', window.location.origin).href;
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }
+
+        function closeHubSettings() {
             const settingsPanel = document.getElementById('hubSettingsPanel');
             const settingsToggle = document.getElementById('hubSettingsToggle');
             if (settingsPanel) {
@@ -1832,6 +1887,53 @@
             if (settingsToggle) {
                 settingsToggle.setAttribute('aria-expanded', 'false');
             }
+        }
+
+        function showAboutHub() {
+            closeHubSettings();
+            const backdrop = document.createElement('div');
+            backdrop.className = 'modal-backdrop';
+            const dialog = document.createElement('div');
+            dialog.className = 'modal-dialog about-dialog';
+            dialog.setAttribute('role', 'dialog');
+            dialog.setAttribute('aria-labelledby', 'aboutHubTitle');
+            const hubUrl = window.location.origin;
+            dialog.innerHTML = `
+                <h3 id="aboutHubTitle">About Cast Hub</h3>
+                <p>3D Slicer Cast Interface hub — coordinates CAST subscriptions, events, and resource servers.</p>
+                <p class="about-meta"><strong>Hub URL:</strong> ${escapeHtml(hubUrl)}</p>
+                <div class="about-links">
+                    <button type="button" id="aboutOpenVolViewBtn">Open VolView</button>
+                </div>
+                <div class="about-danger-zone">
+                    <p>Reset clears all subscriptions, conferences, and message log entries. This cannot be undone.</p>
+                    <button type="button" id="aboutResetServerBtn" class="btn-confirm-reset">Reset server</button>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="closeAboutBtn" class="btn-cancel">Close</button>
+                </div>
+            `;
+            document.body.appendChild(backdrop);
+            document.body.appendChild(dialog);
+
+            const closeAbout = () => {
+                document.body.removeChild(backdrop);
+                document.body.removeChild(dialog);
+            };
+
+            backdrop.onclick = closeAbout;
+            document.getElementById('closeAboutBtn').onclick = closeAbout;
+            document.getElementById('aboutOpenVolViewBtn').onclick = () => {
+                openVolViewClient();
+            };
+            document.getElementById('aboutResetServerBtn').onclick = () => {
+                const resetBtn = document.getElementById('aboutResetServerBtn');
+                closeAbout();
+                resetHub(resetBtn);
+            };
+        }
+
+        async function resetHub(resetTriggerBtn) {
             const backdrop = document.createElement('div');
             backdrop.className = 'modal-backdrop';
             const dialog = document.createElement('div');
@@ -1871,10 +1973,11 @@
                     const singleUserMode = document.getElementById('singleUserModeCheckbox').checked;
                     closeDialog();
 
-                    const resetBtn = document.getElementById('serverResetBtn');
                     const statusDiv = document.getElementById('serverResetStatus');
-                    resetBtn.disabled = true;
-                    resetBtn.textContent = 'Resetting...';
+                    if (resetTriggerBtn) {
+                        resetTriggerBtn.disabled = true;
+                        resetTriggerBtn.textContent = 'Resetting...';
+                    }
                     statusDiv.innerHTML = '';
 
                     try {
@@ -1904,8 +2007,10 @@
                             statusDiv.innerHTML = '';
                         }, STATUS_AUTO_HIDE_MS);
                     } finally {
-                        resetBtn.disabled = false;
-                        resetBtn.textContent = 'Reset server';
+                        if (resetTriggerBtn) {
+                            resetTriggerBtn.disabled = false;
+                            resetTriggerBtn.textContent = 'Reset server';
+                        }
                     }
 
                     resolve(true);

@@ -19,12 +19,12 @@ class CastInterface(ScriptedLoadableModule):
     def __init__(self, parent):
         ScriptedLoadableModule.__init__(self, parent)
         self.parent.title = _("Cast Interface")
-        self.parent.categories = [_("Cast")]
+        self.parent.categories = [_("Informatics")]
         self.parent.dependencies = []
         self.parent.contributors = ["ProjectWeek45"]
         self.parent.helpText = _(
             """
-            Cast interface for 3D Slicer: Resource Servers, Image Display client and Hub.<br><br>
+            Cast interface for 3D Slicer: Hub, Resource Servers and  Image Display client .<br><br>
             Resource Servers:
             Resource servers subscribe to all user topics for dicom events and send back results to the user.
             Each resource server connects with its own product name and onMessage script.
