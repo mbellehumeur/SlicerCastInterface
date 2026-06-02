@@ -138,52 +138,14 @@ Full description: [docs/binary-file-transfer.md](docs/binary-file-transfer.md).
   <img src="CastInterface/docs/images/binary-file-transfer-animated.svg" alt="Binary file transfer (animated)" width="100%">
 </p>
 
-#### Binary transfer filename policy
-
-The hub enforces an **allowlist** on `resource.fileName` and filters out double extensions when it accepts **binary payload bytes**.
-
-
-##### Default allowed suffixes
-
-Longest match wins (so `study.nii.gz` uses `.nii.gz`, not `.gz`).
-
-| Imaging | Archives / compression |
-|---------|-------------------------|
-| `.dcm`, `.dicom`, `.dic` | `.zip` |
-| `.nii`, `.nii.gz`, `.nrrd` | `.tar`, `.tar.gz`, `.gz` |
-| `.png`, `.jpg`, `.jpeg`, `.tif`, `.tiff`, `.bmp` | |
-
-##### Double extensions
-
-After the outer allowlisted suffix is matched, any **earlier** dotted segment
-must not be a dangerous type (executables, scripts, installers, etc.).
-
-Examples:
-
-| Filename | Result |
-|----------|--------|
-| `patient.dcm` | Allowed |
-| `volume.nii.gz` | Allowed |
-| `bundle.tar.gz` | Allowed |
-| `study.dcm.exe` | Rejected (`double_extension`) |
-| `malware.exe.dcm` | Rejected |
-| `../etc/passwd.dcm` | Rejected (`invalid_file_name`) |
-
-##### Configuration
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CAST_HUB_FILENAME_POLICY` | on | Set to `off` to disable checks (dev only). |
-| `CAST_HUB_ALLOWED_EXTENSIONS` | (see table) | Comma-separated list, e.g. `.dcm,.nii.gz,.zip` |
-
-
+The hub filename policy is the [following](CastInterface/docs/filename-policy.md).
 
 
 ### Security Benefits for cloud deployment of 3D Slicer extensions 
 
 This architecture protects resource servers by eliminating direct inbound internet exposure entirely.
 
-With resourver servers, developers can connect  the code running on their machine to their cloud hub instance. The instance in their dev environment is therefore available to their test parters in the cloud without having to deploy their code.  
+With resource servers, developers can connect  the code running on their machine to their cloud hub instance. The instance in their dev environment is therefore available to their remote parters without having to deploy their code to a cloud server.  
 
 
 Each resource server establishes only **outbound encrypted connections** to the Cast Hub, which functions exclusively as a  **routing  appliance**. Because no inbound ports need to be opened on hospital or enterprise networks, the resource servers remain protected behind existing firewalls and are never directly reachable from the public internet.
@@ -197,7 +159,7 @@ For the hub, it provides a significantly reduced attack surface and minimizes op
 </p>
 
 
-
+After installation, the resource servers outbound ports can also be locked down, allowing access to the hub and sites needed by the extension only.
 
 In theory, the hub can be cloud deployed as a serverless application.  In practice, many of those low cost offerings do not support websocket services and a docker based offering is necessary like  Azure WebApps or AWS elastic beanstalk.  
 

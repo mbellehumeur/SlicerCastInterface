@@ -219,13 +219,6 @@ VolView sends a study or series as **one** `dicom-send` STOW batch:
 2. Client uploads manifest + one `application/dicom` part per slice.
 3. Receivers download all `payloadId`s, then run segmentation or other logic.
 
-**Do not use** (removed from the protocol):
-
-- `dicomtransfer-request` / `dicomtransfer-response`
-- `dicomTransferId`
-- `dicom-send` with `context.status: complete` as an end-of-transfer signal
-- `multipart/form-data` (`message` + `file`)
-
 ---
 
 ## End-to-end example
@@ -266,4 +259,3 @@ VolView → local hub → TotalSegmentator on topic `USER-1`:
 | Slicer hub loop | `CastInterface/Lib/resource_server_hub.py` |
 | Provider scripts | `CastInterface/Lib/cast_provider_runtime.py`, `Resources/scripts/` |
 
-Workspace contract: `ProjectWeek45/AGENTS.md` (Cast wire-shape section).
