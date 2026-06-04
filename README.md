@@ -73,14 +73,15 @@ The image display client provide a PACS client type interface to the 3D slicer v
 
 ![image display client](CastInterface/docs/images/ImageDisplayClient.png)
 
-### Security Benefits for cloud deployment of 3D Slicer extensions 
+### Simplified, secure deployment of medical imaging services 
 
-This architecture protects resource servers by eliminating direct inbound internet exposure entirely.
+
+This architecture protects resource servers by eliminating direct inbound internet exposure entirely.  No hostname is required or change to the networking environment.
 
 With resource servers, developers can connect  the code running on their machine to their cloud hub instance. The instance in their dev environment is therefore available to their remote parters without having to deploy their code to a cloud server.  
 
 
-Each resource server establishes only **outbound encrypted connections** to the Cast Hub, which functions exclusively as a  **routing  appliance**. Because no inbound ports need to be opened on hospital or enterprise networks, the resource servers remain protected behind existing firewalls and are never directly reachable from the public internet.
+Each resource server establishes only outbound encrypted connections to the Cast Hub, which functions exclusively as a  routing  appliance. Because no inbound ports need to be opened on hospital or enterprise networks, the resource servers remain protected behind existing firewalls and are never directly reachable from the public internet.
 
 It also simplifies providing resources in-house  since the IT department only needs to add a hostname and rules for the hub.  They do not have to touch their networking every time a new resource server is available for use.  They only have to configure a shared key for it in their auth server.
 
