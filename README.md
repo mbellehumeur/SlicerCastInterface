@@ -32,7 +32,7 @@ You can get a feeling for Cast with the vtk-js IO module cast interface example:
 [![Cast worklist client](CastInterface/docs/images/worklist-client.png)](https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/worklist-client/examples/CastClient/index.html)
 
 
-Cast also has a context sharing strategy and hub architecture that diverges from FHIRcast ([full Cast description](CastInterface/docs/cast-description.md)).
+Cast also has a context sharing strategy and hub architecture that diverges from FHIRcast, see description  [here](CastInterface/docs/cast-description.md).
 
 
 
