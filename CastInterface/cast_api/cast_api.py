@@ -90,6 +90,9 @@ from hub_metrics import collect_hub_metrics
 # multiple subscribers may now respond to the same request.
 CAST_REQUEST_TIMEOUT_SECONDS = float(os.getenv("CAST_REQUEST_TIMEOUT_SECONDS", "10"))
 
+# Hub-generated lifecycle event (not FHIRcast catalog); fan-out to peers on same topic.
+SUBSCRIPTION_REMOVED_EVENT = "subscription-removed"
+
 
 def _env_flag(name: str, default: bool = False) -> bool:
     raw = os.getenv(name)
@@ -448,6 +451,16 @@ async def _quiet_hub_uvicorn_access_logs() -> None:
         CAST_HUB_HTTP_PAYLOAD_TTL_SECONDS,
         CAST_HUB_HTTP_PAYLOAD_MAX_TOTAL_BYTES,
     )
+    if _registered_spa_clients:
+        cast_hub_logger.info(
+            "Cast hub SPA clients: %s",
+            ", ".join(_registered_spa_clients),
+        )
+    else:
+        cast_hub_logger.info(
+            "Cast hub SPA clients: none (build and sync volview-client, "
+            "vtkjs-worklist-client, OHIF-client)"
+        )
     asyncio.create_task(_http_payload_reaper())
 
 
@@ -469,33 +482,58 @@ resources_dir = os.path.join(base_dir, "Resources")
 if os.path.exists(resources_dir):
     app.mount("/static", StaticFiles(directory=resources_dir), name="static")
 
-# Optional VolView SPA hosting under /volview-client
-volview_client_dir = os.path.join(base_dir, "volview-client")
-volview_index = os.path.join(volview_client_dir, "index.html")
-if os.path.isdir(volview_client_dir):
-    assets_dir = os.path.join(volview_client_dir, "assets")
+# Bundled SPAs: mount_path (URL) -> folder under cast_api/
+SPA_CLIENTS = [
+    ("volview-client", "volview-client"),
+    ("worklist-client", "vtkjs-worklist-client"),
+    ("ohif-client", "OHIF-client"),
+]
+
+
+def _register_spa_client(app, mount_path: str, client_folder: str) -> bool:
+    """Serve a built SPA at /{mount_path}/ from cast_api/{client_folder}/."""
+    mount_path = mount_path.strip("/")
+    client_dir = os.path.join(base_dir, client_folder)
+    index_path = os.path.join(client_dir, "index.html")
+    if not os.path.isdir(client_dir) or not os.path.isfile(index_path):
+        return False
+
+    assets_dir = os.path.join(client_dir, "assets")
+    mount_slug = mount_path.replace("-", "_")
     if os.path.isdir(assets_dir):
         app.mount(
-            "/volview-client/assets",
+            f"/{mount_path}/assets",
             StaticFiles(directory=assets_dir),
-            name="volview_client_assets",
+            name=f"spa_{mount_slug}_assets",
         )
 
-    @app.get("/volview-client")
-    async def volview_client_root():
-        # Ensure relative ./assets paths resolve under /volview-client/.
-        return RedirectResponse(url="/volview-client/")
+    async def spa_root():
+        return RedirectResponse(url=f"/{mount_path}/")
 
-    @app.get("/volview-client/{full_path:path}")
-    async def volview_client_spa(full_path: str):
-        requested_file = os.path.join(volview_client_dir, full_path)
+    async def spa_files(full_path: str):
+        requested_file = os.path.join(client_dir, full_path)
         if os.path.isfile(requested_file):
             return FileResponse(requested_file)
-        if os.path.isfile(volview_index):
-            return FileResponse(volview_index)
+        if os.path.isfile(index_path):
+            return FileResponse(index_path)
         raise HTTPException(
-            status_code=404, detail="volview-client/index.html not found"
+            status_code=404,
+            detail=f"{client_folder}/index.html not found",
         )
+
+    app.add_api_route(f"/{mount_path}", spa_root, methods=["GET"])
+    app.add_api_route(
+        f"/{mount_path}/{{full_path:path}}",
+        spa_files,
+        methods=["GET"],
+    )
+    return True
+
+
+_registered_spa_clients: List[str] = []
+for _mount_path, _client_folder in SPA_CLIENTS:
+    if _register_spa_client(app, _mount_path, _client_folder):
+        _registered_spa_clients.append(f"/{_mount_path}/")
 
 
 def _subscription_topic_matches(sub_topic: str, event_topic: str) -> bool:
@@ -874,7 +912,7 @@ class CastHub:
                 if channel_endpoint and "/bind/" in channel_endpoint
                 else None
             )
-            removed_count = self.remove_subscription(
+            removed_count, removed_subs = self.remove_subscription(
                 endpoint=endpoint_id,
                 callback=hub_callback,
                 topic=hub_topic,
@@ -893,14 +931,72 @@ class CastHub:
                         websocket_endpoint=endpoint_id or "",
                     )
                 )
-            return {"removed": removed_count}
+            return {
+                "removed": removed_count,
+                "removed_subscriptions": removed_subs,
+            }
         
         else:
             raise ValueError(f"Invalid hub.mode: {hub_mode}")
     
-    def remove_subscription(self, endpoint: str = None, callback: str = None, topic: str = None) -> int:
-        """Remove subscriptions matching the given criteria"""
+    def _copy_subscription_record(self, sub: Dict) -> Dict:
+        return copy.deepcopy(sub)
+
+    async def broadcast_subscription_removed(
+        self, removed_subs: List[Dict], reason: str
+    ) -> None:
+        """Notify other subscribers that a peer subscription was removed."""
+        for sub in removed_subs:
+            topic = str(sub.get("topic") or "").strip()
+            if not topic:
+                continue
+            subscriber_name = str(sub.get("subscriber") or "").strip()
+            product = _subscription_product_name(sub)
+            actors = _subscription_actor_list(sub)
+            notification = {
+                "timestamp": datetime.now().isoformat(),
+                "id": str(uuid.uuid4()),
+                "subscriber.name": subscriber_name,
+                "event": {
+                    "hub.topic": topic,
+                    "hub.event": SUBSCRIPTION_REMOVED_EVENT,
+                    "context": {
+                        "reason": reason,
+                        "subscriber": subscriber_name,
+                    },
+                },
+            }
+            if product:
+                notification["subscriber.product.name"] = product
+            if len(actors) == 1:
+                notification["subscriber.actor"] = actors[0]
+            elif len(actors) > 1:
+                notification["subscriber.actor"] = actors
+            try:
+                await _handle_publish_notification(notification)
+            except HTTPException as exc:
+                self.log(
+                    f"subscription-removed fan-out failed for topic '{topic}': "
+                    f"{exc.detail}"
+                )
+            except Exception as exc:
+                self.log(
+                    f"subscription-removed fan-out error for topic '{topic}': "
+                    f"{type(exc).__name__}: {exc}"
+                )
+
+    def remove_subscription(
+        self,
+        endpoint: str = None,
+        callback: str = None,
+        topic: str = None,
+    ) -> Tuple[int, List[Dict]]:
+        """Remove subscriptions matching the given criteria.
+
+        Returns ``(removed_count, copies_of_removed_records)`` for fan-out.
+        """
         removed_count = 0
+        removed_subs: List[Dict] = []
         for sub in self.subscriptions[:]:
             matched = False
             if endpoint and sub.get("websocket_endpoint") == endpoint:
@@ -928,6 +1024,7 @@ class CastHub:
                     websocket_endpoint=str(sub.get("websocket_endpoint") or ""),
                 )
             )
+            removed_subs.append(self._copy_subscription_record(sub))
             self.subscriptions.remove(sub)
             removed_count += 1
 
@@ -936,7 +1033,7 @@ class CastHub:
                 f"Subscription cleanup: removed={removed_count} "
                 f"remaining={len(self.subscriptions)}"
             )
-        return removed_count
+        return removed_count, removed_subs
     
     def get_subscriptions(self) -> List[Dict]:
         """Get all active subscriptions"""
@@ -960,12 +1057,19 @@ class CastHub:
         self.websocket_connections[endpoint] = websocket
         self.log(f"WebSocket registered for endpoint: {endpoint} (total: {len(self.websocket_connections)})")
     
-    def unregister_websocket(self, endpoint: str):
-        """Unregister a WebSocket connection"""
+    async def unregister_websocket(self, endpoint: str):
+        """Unregister a WebSocket connection and notify peers."""
         if endpoint in self.websocket_connections:
             del self.websocket_connections[endpoint]
-            self.remove_subscription(endpoint=endpoint)
-            self.log(f"WebSocket unregistered for endpoint: {endpoint} (remaining: {len(self.websocket_connections)})")
+        _removed_count, removed_subs = self.remove_subscription(endpoint=endpoint)
+        if removed_subs:
+            await self.broadcast_subscription_removed(
+                removed_subs, "websocket-disconnect"
+            )
+        self.log(
+            f"WebSocket unregistered for endpoint: {endpoint} "
+            f"(remaining: {len(self.websocket_connections)})"
+        )
     
     def register_admin_websocket(self, websocket: WebSocket, location: str = "unknown"):
         """Register an admin WebSocket connection with location info"""
@@ -1689,6 +1793,17 @@ async def post_cast_request(request: Request):
                 publisher=_publisher_for_cast_request(subscriber, requested_product_name),
             )
 
+            requester_product_name = _optional_str_field(
+                request_data.get("subscriber.product.name")
+            )
+            if not requester_product_name:
+                for req_sub in requester_matches:
+                    requester_product_name = _optional_str_field(
+                        _subscription_product_name(req_sub)
+                    )
+                    if requester_product_name:
+                        break
+
             try:
                 send_failures: List[str] = []
                 for sub in target_subscriptions:
@@ -1716,6 +1831,9 @@ async def post_cast_request(request: Request):
                             "context": fan_out_context,
                         },
                     }
+                    notification["subscriber.name"] = subscriber
+                    if requester_product_name:
+                        notification["subscriber.product.name"] = requester_product_name
                     if requested_actor:
                         notification["subscriber.actor"] = requested_actor
                     if filter_actor:
@@ -2479,7 +2597,11 @@ async def _handle_publish_notification(
                     if endpoint in cast_hub.websocket_connections:
                         del cast_hub.websocket_connections[endpoint]
                     if sub in cast_hub.subscriptions:
+                        removed_copy = cast_hub._copy_subscription_record(sub)
                         cast_hub.subscriptions.remove(sub)
+                        await cast_hub.broadcast_subscription_removed(
+                            [removed_copy], "send-failure"
+                        )
             else:
                 if not endpoint:
                     cast_hub.log(f"WebSocket endpoint not set for subscription: {sub.get('subscriber')}")
@@ -2618,6 +2740,11 @@ async def post_hub(request: Request):
             if hub_mode == "unsubscribe":
                 # Handle unsubscribe
                 result = cast_hub.add_subscription(subscription_data)
+                removed_subs = result.get("removed_subscriptions") or []
+                if removed_subs:
+                    await cast_hub.broadcast_subscription_removed(
+                        removed_subs, "unsubscribe"
+                    )
                 return {"status": "unsubscribed", "removed": result.get("removed", 0)}
             # Handle subscribe
             result = cast_hub.add_subscription(subscription_data)
@@ -2668,11 +2795,15 @@ async def delete_hub(request: Request):
         topic = unsubscribe_data.get("hub.topic") or unsubscribe_data.get("hub_topic")
         
         if endpoint or (callback and topic):
-            removed_count = cast_hub.remove_subscription(
+            removed_count, removed_subs = cast_hub.remove_subscription(
                 endpoint=endpoint.split("/bind/")[-1] if endpoint and "/bind/" in endpoint else None,
                 callback=callback,
                 topic=topic
             )
+            if removed_subs:
+                await cast_hub.broadcast_subscription_removed(
+                    removed_subs, "unsubscribe"
+                )
             await cast_hub.send_admin_refresh_command()
             return {"status": "unsubscribed", "removed": removed_count}
     
@@ -2821,7 +2952,7 @@ async def websocket_endpoint(websocket: WebSocket, endpoint: str):
                 pass
 
         # Unregister WebSocket connection
-        cast_hub.unregister_websocket(endpoint)
+        await cast_hub.unregister_websocket(endpoint)
         cast_hub.log(f"WebSocket cleanup completed for endpoint: {endpoint}")
         
         # Send admin refresh on disconnect

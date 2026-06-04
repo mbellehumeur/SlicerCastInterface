@@ -12,10 +12,6 @@
 Cast Interface is a 3D Slicer extension focused on desktop integration workflows for healthcare providers and researchers.
 
 
----
-
-
----
 ## Background
 
 Cast is an offshoot of FHIRcast (<https://fhircast.hl7.org/>). FHIRcast is the standard replacing Epic’s file drop interface for integration with PACS and reporting systems. It provides a secure event messaging infrastructure using a hub with websocket subscriptions.  The following animation shows distribution of a FHIRCast ImagingStudy-open event to all applications over low-latency websocket connections. 
@@ -30,7 +26,19 @@ Cast is an offshoot of FHIRcast (<https://fhircast.hl7.org/>). FHIRcast is the s
 
 
 
-Cast is focused on desktop integration of all healthcare applications. It is not restricted to a specific data format and does not mandate the development of authorization scoping features.  Cast also has a context sharing strategy and hub architecture that diverges from FHIRcast (see non-conformance statement here).
+
+You can get a feeling for Cast with the vtk-js IO module cast interface example:
+<iframe
+  src="https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/worklist-client/examples/CastClient/index.html"
+  title="Cast worklist client"
+  width="100%"
+  height="720"
+  style="border: 1px solid #ccc; border-radius: 8px;"
+  loading="lazy"
+  allowfullscreen
+></iframe>
+
+.  Cast also has a context sharing strategy and hub architecture that diverges from FHIRcast (see non-conformance statement here).
 
 
 
@@ -47,7 +55,7 @@ The hub is the server that distributes the messages and handles the data transfe
 ![hub portal](CastInterface/docs/images/hub-admin.png)
 
 Online example:  
-https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/
+https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/api/hub/admin
 
 #### Resource servers: 
 The resource server tab provides a way for other 3D slicer extensions to connect to the hub and provide their resource to the users.  Resource servers subscribe to all user topics for dicom/nifti events and send back results to the user through the hub. Developers can setup a hub in the cloud and connect the extension running on their local machine to the cloud.  The instance in their dev environment is therefore available to their test parters in the cloud without having to deploy their code.
@@ -73,6 +81,8 @@ The image display client provide a PACS client type interface to the 3D slicer v
 
 ### Cast Description 
 
+Cast is focused on desktop integration of all healthcare applications. It is not restricted to a specific data format and does not mandate the development of authorization scoping features
+
 In addition to distributing FHIRcast events, Cast allows the following:
 
  - Request data from applications such as worklist context, report content, DICOM instance, DICOM metadata, JPEG/PNG screenshots, scene views, etc.
@@ -96,6 +106,8 @@ In addition to distributing FHIRcast events, Cast allows the following:
      - subscriber.actor
      - target.actor
      - target.product.name
+
+ - Support for an hub-generated ;subription-removed' event when an applicatio disconnects from the websocket.     
 
 
 

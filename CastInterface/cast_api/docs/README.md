@@ -101,6 +101,21 @@ sequenceDiagram
   (matches `client_info.productName` on the subscription).
 - Publisher subscriber name is not delivered a copy of its own publish.
 
+### `subscription-removed` (hub lifecycle)
+
+When a subscription is removed (explicit unsubscribe, WebSocket disconnect, or send failure), the hub fans out a **`subscription-removed`** event to other subscribers on the same topic (same matching rules as publish). The removed peer does not receive the notification.
+
+| Field | Description |
+| --- | --- |
+| `event.hub.event` | `subscription-removed` |
+| `event.hub.topic` | Topic of the removed subscription |
+| `subscriber.name` | Removed subscriber |
+| `subscriber.product.name` | Optional product from subscription `client_info` |
+| `event.context.reason` | `unsubscribe`, `websocket-disconnect`, or `send-failure` |
+| `event.context.subscriber` | Same as `subscriber.name` |
+
+Subscribe with `subscription-removed` in `hub.events` (or `*`) to receive these notifications.
+
 **Binary file transfer:** STOW batch only — `POST /api/hub/` as `multipart/related` (Cast JSON manifest + one part per `context.files[]` entry). Hub fans out one text WebSocket message with `files[].payloadId`; subscribers download via `GET /api/hub/payloads/{payloadId}` when the app calls `fetch_all_payloads`. Full write-up: Slicer extension `CastInterface/docs/binary-file-transfer.md` (same content as in a pw45 checkout). Legacy `multipart/form-data` returns HTTP 400.
 
 **Filename policy:** When the hub stores binary bytes (HTTP payload store or multipart upload), `resource.fileName` must match an allowlisted suffix and pass a double-extension check. See [filename-policy.md](filename-policy.md). Disable with `CAST_HUB_FILENAME_POLICY=off`.
