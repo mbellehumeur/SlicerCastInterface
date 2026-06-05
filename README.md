@@ -27,7 +27,7 @@ Cast is an offshoot of FHIRcast (<https://fhircast.hl7.org/>). FHIRcast is the s
 
 
 
-You can get a feeling for Cast with the vtk-js IO module cast interface example:
+You can get a feeling for Cast with the vtk-js IO module cast interface example.  Make sure to open a few viewers and try the "Open scene views" button to experience cross-product multi-hosts display layouts:
 **[Open live worklist demo](https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/worklist-client/examples/CastClient/index.html)**
 [![Cast worklist client](CastInterface/docs/images/worklist-client.png)](https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/worklist-client/examples/CastClient.html)
 
