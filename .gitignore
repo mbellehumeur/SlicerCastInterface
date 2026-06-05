@@ -221,5 +221,7 @@ __marimo__/
 # Cast hub packaging artifacts
 CastInterface/cast_api/cast-hub.zip
 
-# VolView SPA build output (served by cast_api at /volview-client)
+# Cast hub SPA bundles (synced by make_zip.py; do not commit)
 CastInterface/cast_api/volview-client/
+CastInterface/cast_api/vtkjs-worklist-client/
+CastInterface/cast_api/OHIF-client/

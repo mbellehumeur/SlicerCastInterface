@@ -6,7 +6,7 @@ packages everything under cast_api/:
 
 - volview-client/  <- VolView/dist  (served at /volview-client/)
 - vtkjs-worklist-client/  <- vtk-js/Documentation/.vitepress/dist  (/worklist-client/)
-- OHIF-client/  <- Viewers/platform/app/dist  (/ohif-client/)
+- OHIF-client/  <- Viewers/platform/app/dist  (hub root /)
 
 Run from any directory:
     python CastInterface/cast_api/make_zip.py
@@ -16,7 +16,7 @@ Optional:
     python CastInterface/cast_api/make_zip.py --skip-sync
 
 OHIF (Viewers/platform/app): yarn build:cast-hub
-    (PUBLIC_URL=/ohif-client/, APP_CONFIG=config/cast.js)
+    (PUBLIC_URL=/, APP_CONFIG=config/cast.js)
 
 vtk-js docs for hub: VITEPRESS_BASE=/worklist-client/ npm run docs:build
     (or npm run docs:build:cast-hub)
@@ -51,7 +51,7 @@ CLIENT_SYNC_SPECS = (
 MOUNT_PATH_BY_DEST = {
     "volview-client": "/volview-client/",
     "vtkjs-worklist-client": "/worklist-client/",
-    "OHIF-client": "/ohif-client/",
+    "OHIF-client": "/",
 }
 
 # Repo folder names and dist paths under each repo (workspace / ProjectWeek45 layout).

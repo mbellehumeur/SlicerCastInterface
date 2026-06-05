@@ -255,7 +255,7 @@ VolView → local hub → TotalSegmentator on topic `USER-1`:
 | Python client | `VolView/server/cast_api/cast_client.py`, `CastInterface/Lib/cast_client.py` |
 | Browser client | `vtk-js/Sources/IO/Core/CastClient/` |
 | VolView app | `VolView/src/io/cast-client.ts`, `build-dicom-stow-manifest.ts`, `build-nifti-send-context.ts` |
-| OHIF | `Viewers/extensions/cast/src/services/CastService/` |
+| OHIF | `Viewers/extensions/cast/src/services/CastService/`, `Viewers/extensions/cast/src/cast/` |
 | Slicer hub loop | `CastInterface/Lib/resource_server_hub.py` |
 | Provider scripts | `CastInterface/Lib/cast_provider_runtime.py`, `Resources/scripts/` |
 

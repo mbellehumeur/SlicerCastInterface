@@ -482,12 +482,14 @@ resources_dir = os.path.join(base_dir, "Resources")
 if os.path.exists(resources_dir):
     app.mount("/static", StaticFiles(directory=resources_dir), name="static")
 
-# Bundled SPAs: mount_path (URL) -> folder under cast_api/
+# Bundled SPAs at subpaths: mount_path (URL) -> folder under cast_api/
 SPA_CLIENTS = [
     ("volview-client", "volview-client"),
     ("worklist-client", "vtkjs-worklist-client"),
-    ("ohif-client", "OHIF-client"),
 ]
+
+# OHIF is served at hub root (/) — see _register_hub_root_spa() after API routes.
+HUB_ROOT_SPA_FOLDER = "OHIF-client"
 
 
 def _register_spa_client(app, mount_path: str, client_folder: str) -> bool:
@@ -526,6 +528,39 @@ def _register_spa_client(app, mount_path: str, client_folder: str) -> bool:
         f"/{mount_path}/{{full_path:path}}",
         spa_files,
         methods=["GET"],
+    )
+    return True
+
+
+def _register_hub_root_spa(app, client_folder: str) -> bool:
+    """Serve OHIF at hub ``/`` (GET). Must register after API routes."""
+    client_dir = os.path.join(base_dir, client_folder)
+    index_path = os.path.join(client_dir, "index.html")
+    if not os.path.isdir(client_dir) or not os.path.isfile(index_path):
+        return False
+
+    assets_dir = os.path.join(client_dir, "assets")
+    if os.path.isdir(assets_dir):
+        app.mount(
+            "/assets",
+            StaticFiles(directory=assets_dir),
+            name="spa_ohif_hub_root_assets",
+        )
+
+    async def hub_root_spa(full_path: str = ""):
+        relative = full_path.lstrip("/")
+        if relative:
+            requested_file = os.path.join(client_dir, relative)
+            if os.path.isfile(requested_file):
+                return FileResponse(requested_file)
+        return FileResponse(index_path)
+
+    app.add_api_route("/", hub_root_spa, methods=["GET"], name="hub_root_ohif_index")
+    app.add_api_route(
+        "/{full_path:path}",
+        hub_root_spa,
+        methods=["GET"],
+        name="hub_root_ohif_catchall",
     )
     return True
 
@@ -3309,6 +3344,11 @@ async def post_oauth_token(request: Request):
     return response
 
 
+# OHIF at hub root — registered last so /api/hub, /oauth, etc. take precedence.
+if _register_hub_root_spa(app, HUB_ROOT_SPA_FOLDER):
+    _registered_spa_clients.append("/ (OHIF)")
+
+
 def main():
     """Main function to run the Cast Hub server"""
     import argparse
@@ -3325,6 +3365,8 @@ def main():
     print("=" * 60)
     print(f"Server running on http://{args.host}:{args.port}")
     print(f"Hub API endpoint: http://{args.host}:{args.port}/api/hub/")
+    if any("OHIF" in entry for entry in _registered_spa_clients):
+        print(f"OHIF viewer: http://{args.host}:{args.port}/")
     print("")
     print("Test endpoints:")
     print(f"  GET    http://{args.host}:{args.port}/api/hub/admin (admin status page)")
