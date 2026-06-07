@@ -1,0 +1,15 @@
+{
+  "id": "TestPattern",
+  "name": "Test Pattern",
+  "description": "TG-18 Luminance test pattern",
+  "openMode": "dicom-url",
+  "format": "DICOM",
+  "size": "1 MB",
+  "files": [
+    {
+      "fileName": "TG18-CT-1k-01.dcm",
+      "mimeType": "application/dicom",
+      "label": "Test Pattern"
+    }
+  ]
+}

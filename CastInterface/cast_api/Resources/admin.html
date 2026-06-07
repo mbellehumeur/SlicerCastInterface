@@ -318,6 +318,62 @@
         .hub-settings {
             position: relative;
         }
+        .hub-settings-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+        }
+        .hub-cast-radio {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            color: var(--text-secondary);
+            cursor: default;
+        }
+        .hub-cast-radio-icon {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .hub-cast-radio-svg {
+            display: block;
+            width: 20px;
+            height: 20px;
+        }
+        .hub-cast-radio-slash {
+            pointer-events: none;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 2px;
+            height: 130%;
+            transform: translate(-50%, -50%) rotate(45deg);
+            border-radius: 999px;
+            background: currentColor;
+            opacity: 0.9;
+        }
+        .hub-cast-radio--connected {
+            color: #4ade80;
+        }
+        .hub-cast-radio--connecting {
+            color: #facc15;
+        }
+        .hub-cast-radio-icon--pulse {
+            animation: hub-cast-radio-pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes hub-cast-radio-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.45; }
+        }
+        .hub-cast-radio--disconnected {
+            color: #f87171;
+        }
+        .hub-cast-radio--disconnected .hub-cast-radio-svg {
+            opacity: 0.7;
+        }
         .hub-settings-stack {
             display: flex;
             flex-direction: column;
@@ -633,12 +689,6 @@
             color: var(--text-muted);
             font-style: italic;
         }
-        .controls {
-            margin: 20px 0;
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
         button {
             padding: 8px 16px;
             border: 1px solid var(--border-btn);
@@ -658,19 +708,6 @@
             color: var(--text-disabled);
             cursor: not-allowed;
             border-color: var(--border-btn-disabled);
-        }
-        .last-updated {
-            color: var(--text-secondary);
-            font-size: 14px;
-        }
-        #connectionStatus.connection-status-connected {
-            color: var(--accent-stat);
-        }
-        #connectionStatus.connection-status-connecting {
-            color: var(--text-secondary);
-        }
-        #connectionStatus.connection-status-disconnected {
-            color: var(--text-muted);
         }
         .error {
             background-color: var(--error-bg);
@@ -792,14 +829,6 @@
             background-color: var(--direction-sent-bg);
             color: var(--direction-sent-color);
         }
-        .refresh-link {
-            color: var(--accent);
-            cursor: pointer;
-            text-decoration: underline;
-        }
-        .refresh-link:hover {
-            color: var(--accent-hover);
-        }
         .modal-backdrop {
             position: fixed;
             top: 0;
@@ -909,6 +938,9 @@
             const mode = COLOR_MODES.includes(savedMode) ? savedMode : 'dark';
             document.documentElement.dataset.mode = mode;
             const isSlicer = theme === '3dslicer';
+            const HUB_PRODUCT_NAME = isSlicer
+                ? '3D Slicer Cast Hub'
+                : 'Server Cast API';
             document.title = isSlicer
                 ? '3D Slicer Cast Hub'
                 : 'VolView Server Cast API';
@@ -925,9 +957,11 @@
             document.addEventListener('DOMContentLoaded', function () {
                 const titleEl = document.querySelector('.header-title');
                 if (titleEl) {
-                    titleEl.textContent = isSlicer
-                        ? '3D Slicer Cast Hub'
-                        : 'Server Cast API';
+                    titleEl.textContent = HUB_PRODUCT_NAME;
+                }
+                const radioEl = document.getElementById('hubCastRadio');
+                if (radioEl) {
+                    radioEl.setAttribute('data-hub-product-name', HUB_PRODUCT_NAME);
                 }
                 const colorSelect = document.getElementById('colorModeSelect');
                 if (colorSelect) {
@@ -1027,7 +1061,27 @@
                 </div>
                 <span id="singleUserBadge" class="single-user-badge" style="display:none;" title="Token endpoint returns SINGLE-USER in this mode">Single-user mode</span>
                 <div class="hub-settings">
-                    <div class="hub-settings-stack">
+                    <div class="hub-settings-header">
+                        <span
+                            id="hubCastRadio"
+                            class="hub-cast-radio hub-cast-radio--connecting"
+                            role="img"
+                            aria-label="Cast hub"
+                        >
+                            <span class="hub-cast-radio-icon">
+                                <svg class="hub-cast-radio-svg" width="20" height="20" viewBox="0 0 24 24"
+                                     fill="none" stroke="currentColor" stroke-width="2"
+                                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/>
+                                    <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/>
+                                    <circle cx="12" cy="12" r="2"/>
+                                    <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/>
+                                    <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/>
+                                </svg>
+                                <span id="hubCastRadioSlash" class="hub-cast-radio-slash" aria-hidden="true" hidden></span>
+                            </span>
+                        </span>
+                        <div class="hub-settings-stack">
                         <button type="button" class="hub-settings-toggle" id="hubSettingsToggle"
                                 aria-expanded="false" aria-controls="hubSettingsPanel" title="Settings">
                             <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -1035,6 +1089,7 @@
                             </svg>
                         </button>
                         <span class="header-meta" id="hubRuntimeMeta" aria-live="polite"></span>
+                        </div>
                     </div>
                     <div class="hub-settings-panel" id="hubSettingsPanel" hidden>
                         <div class="hub-settings-row">
@@ -1053,12 +1108,6 @@
                 </div>
             </div>
         </h1>
-        
-        <div class="controls">
-            <span class="last-updated" id="connectionStatus">Connecting...</span>
-            <span class="last-updated" id="refreshControl" style="display: none;"><span class="refresh-link" onclick="refreshAll()" title="Refresh data">Refresh</span></span>
-            <span class="last-updated" id="lastUpdated"></span>
-        </div>
 
         <div id="errorMessage"></div>
 
@@ -1125,6 +1174,87 @@
             network: [],
         };
         let metricsPollTimer = null;
+        let lastSnapshotUpdatedAt = null;
+
+        function hubProductName() {
+            const radioEl = document.getElementById('hubCastRadio');
+            const fromRadio = radioEl?.getAttribute('data-hub-product-name')?.trim();
+            if (fromRadio) {
+                return fromRadio;
+            }
+            const titleEl = document.querySelector('.header-title');
+            return titleEl?.textContent?.trim() || 'Cast Hub';
+        }
+
+        function connectionStatusText(adminClientCount) {
+            if (adminClientCount === undefined && lastAdminClientCount !== undefined) {
+                adminClientCount = lastAdminClientCount;
+            }
+            if (adminWebSocket && adminWebSocket.readyState === WebSocket.OPEN) {
+                if (adminClientCount !== undefined && adminClientCount > 0) {
+                    return `Connected (${adminClientCount} admin client${adminClientCount !== 1 ? 's' : ''})`;
+                }
+                return 'Connected';
+            }
+            if (adminWebSocket && adminWebSocket.readyState === WebSocket.CONNECTING) {
+                return 'Connecting...';
+            }
+            return 'Disconnected';
+        }
+
+        const HUB_CAST_RADIO_STATUS_CLASSES = [
+            'hub-cast-radio--connected',
+            'hub-cast-radio--connecting',
+            'hub-cast-radio--disconnected',
+        ];
+
+        function hubCastRadioVisualState() {
+            if (adminWebSocket && adminWebSocket.readyState === WebSocket.OPEN) {
+                return {
+                    statusClass: 'hub-cast-radio--connected',
+                    showSlash: false,
+                    pulse: false,
+                };
+            }
+            if (adminWebSocket && adminWebSocket.readyState === WebSocket.CONNECTING) {
+                return {
+                    statusClass: 'hub-cast-radio--connecting',
+                    showSlash: false,
+                    pulse: true,
+                };
+            }
+            return {
+                statusClass: 'hub-cast-radio--disconnected',
+                showSlash: true,
+                pulse: false,
+            };
+        }
+
+        function updateHubCastRadioTooltip(adminClientCount) {
+            const radioEl = document.getElementById('hubCastRadio');
+            if (!radioEl) {
+                return;
+            }
+            const { statusClass, showSlash, pulse } = hubCastRadioVisualState();
+            radioEl.classList.remove(...HUB_CAST_RADIO_STATUS_CLASSES);
+            radioEl.classList.add(statusClass);
+            const iconEl = radioEl.querySelector('.hub-cast-radio-icon');
+            if (iconEl) {
+                iconEl.classList.toggle('hub-cast-radio-icon--pulse', pulse);
+            }
+            const slashEl = document.getElementById('hubCastRadioSlash');
+            if (slashEl) {
+                slashEl.hidden = !showSlash;
+            }
+            const lines = [hubProductName(), connectionStatusText(adminClientCount)];
+            if (lastSnapshotUpdatedAt) {
+                lines.push(
+                    'Last updated: ' + lastSnapshotUpdatedAt.toLocaleTimeString()
+                );
+            }
+            radioEl.title = lines.join('\n');
+            radioEl.setAttribute('aria-label', lines.join('. '));
+        }
 
         /** IHE actor keywords and full names (aligned with Cast client ACTOR_PRESETS). */
         const IHE_ACTOR_REFERENCE = [
@@ -1471,7 +1601,6 @@
                 }
 
                 lastAdminClientCount = stats.total_admin_clients;
-                updateConnectionStatus(lastAdminClientCount);
 
                 renderSubscriptions(data.subscriptions);
                 renderConferences(data.conferences);
@@ -1483,9 +1612,8 @@
                     audit.unique_events || []
                 );
                 displayAuditLog(audit.entries || []);
-
-                document.getElementById('lastUpdated').textContent =
-                    'Last updated: ' + new Date().toLocaleTimeString();
+                lastSnapshotUpdatedAt = new Date();
+                updateHubCastRadioTooltip(lastAdminClientCount);
             } catch (error) {
                 errorDiv.innerHTML =
                     `<div class="error">Error loading dashboard: ${escapeHtml(error.message)}</div>`;
@@ -2039,10 +2167,6 @@
             dialog.innerHTML = `
                 <h3>Reset Server</h3>
                 <p>Are you sure you want to reset the hub? This will delete all subscriptions, conferences, and message log entries. This action cannot be undone.</p>
-                <label>
-                    <input type="checkbox" id="singleUserModeCheckbox" checked>
-                    <span>Single-user mode</span>
-                </label>
                 <div class="modal-actions">
                     <button id="cancelResetBtn" class="btn-cancel">Cancel</button>
                     <button id="confirmResetBtn" class="btn-confirm-reset">Reset</button>
@@ -2068,7 +2192,6 @@
                 };
 
                 document.getElementById('confirmResetBtn').onclick = async () => {
-                    const singleUserMode = document.getElementById('singleUserModeCheckbox').checked;
                     closeDialog();
 
                     const statusDiv = document.getElementById('serverResetStatus');
@@ -2084,7 +2207,7 @@
                             headers: {
                                 'Content-Type': 'application/json'
                             },
-                            body: JSON.stringify({ single_user_mode: singleUserMode })
+                            body: JSON.stringify({})
                         });
 
                         if (response.ok) {
@@ -2116,32 +2239,8 @@
             });
         }
         
-        async function updateConnectionStatus(adminClientCount) {
-            const statusEl = document.getElementById('connectionStatus');
-            if (!statusEl) return;
-            
-            if (adminClientCount === undefined && lastAdminClientCount !== undefined) {
-                adminClientCount = lastAdminClientCount;
-            }
-            
-            const refreshEl = document.getElementById('refreshControl');
-            if (adminWebSocket && adminWebSocket.readyState === WebSocket.OPEN) {
-                if (adminClientCount !== undefined && adminClientCount > 0) {
-                    statusEl.textContent = `Connected (${adminClientCount} admin client${adminClientCount !== 1 ? 's' : ''})`;
-                } else {
-                    statusEl.textContent = 'Connected';
-                }
-                statusEl.className = 'last-updated connection-status-connected';
-                if (refreshEl) refreshEl.style.display = 'none';
-            } else if (adminWebSocket && adminWebSocket.readyState === WebSocket.CONNECTING) {
-                statusEl.textContent = 'Connecting...';
-                statusEl.className = 'last-updated connection-status-connecting';
-                if (refreshEl) refreshEl.style.display = 'inline';
-            } else {
-                statusEl.textContent = 'Disconnected';
-                statusEl.className = 'last-updated connection-status-disconnected';
-                if (refreshEl) refreshEl.style.display = 'inline';
-            }
+        function updateConnectionStatus(adminClientCount) {
+            updateHubCastRadioTooltip(adminClientCount);
         }
         
         // Admin WebSocket connection
@@ -2154,6 +2253,7 @@
             
             try {
                 adminWebSocket = new WebSocket(wsUrl);
+                updateConnectionStatus();
                 
                 adminWebSocket.onopen = function(event) {
                     console.log('Admin WebSocket connected');

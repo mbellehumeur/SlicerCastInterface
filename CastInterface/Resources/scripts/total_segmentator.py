@@ -29,14 +29,15 @@ Cast UI (Resource Servers): point the script path at this file.
 
 from __future__ import annotations
 
-import logging
 import os
 import re
 import shutil
 import subprocess
+import sys
 import sysconfig
 import tempfile
 import time
+import traceback
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -52,10 +53,47 @@ from Lib.cast_provider_runtime import (
     record_nifti_send_received,
 )
 
-LOGGER = logging.getLogger("CastInterface.TotalSegmentatorInline")
-LOGGER.setLevel(logging.INFO)
-# Propagate to Slicer's root logger (application log). Do not attach stderr handlers
-# (those show as red/error-styled output in the Error log widget).
+_LOG_PREFIX = "TotalSegmentator"
+
+
+def _format_message(message: str, *args: Any) -> str:
+    return message % args if args else message
+
+
+def _console_log(message: str, *args: Any) -> None:
+    """Normal output in the Slicer Python console (default/white text)."""
+    text = _format_message(message, *args).rstrip()
+    if not text:
+        return
+    try:
+        import slicer
+
+        slicer.app.processEvents()
+    except ImportError:
+        pass
+    print(f"{_LOG_PREFIX}: {text}")
+
+
+def _console_error(message: str, *args: Any) -> None:
+    """Errors in the Slicer Python console (red text)."""
+    text = _format_message(message, *args).rstrip()
+    if not text:
+        return
+    line = f"{_LOG_PREFIX}: {text}"
+    try:
+        import slicer
+
+        slicer.app.showConsoleMessage(line, error=True)
+        slicer.app.processEvents()
+    except ImportError:
+        print(line, file=sys.stderr)
+
+
+def _console_exception(message: str, *args: Any) -> None:
+    _console_error(message, *args)
+    for exc_line in traceback.format_exc().splitlines():
+        _console_error(exc_line)
+
 
 DEFAULT_PRODUCT_NAME = "TOTALSEG"
 _DICOM_SEND_EVENT = "dicom-send"
@@ -101,21 +139,21 @@ def _on_dicom_send(
 ) -> None:
     topic = (event.get("hub.topic") or "").strip()
     if not topic:
-        LOGGER.warning("TotalSegmentator onMessage: dicom-send missing hub.topic")
+        _console_error("onMessage: dicom-send missing hub.topic")
         return
 
     payloads = extract_all_dicom_send_payloads(message)
     if not payloads:
-        LOGGER.warning(
-            "TotalSegmentator onMessage: no DICOM payload id=%s topic=%s",
+        _console_error(
+            "onMessage: no DICOM payload id=%s topic=%s",
             message.get("id", ""),
             topic,
         )
         return
 
     product_name = getattr(provider, "product_name", "") or DEFAULT_PRODUCT_NAME
-    LOGGER.info(
-        "TotalSegmentator onMessage: dicom-send id=%s topic=%s files=%d",
+    _console_log(
+        "onMessage: dicom-send id=%s topic=%s files=%d",
         message.get("id", ""),
         topic,
         len(payloads),
@@ -128,7 +166,7 @@ def _on_dicom_send(
 
     # TEMPORARY: remove after hub download-speed testing (skips TotalSegmentator).
     total_bytes = sum(len(data) for _, data in payloads)
-    LOGGER.warning(
+    _console_log(
         "TEMPORARY exit after dicom download+stage id=%s topic=%s files=%d "
         "bytes=%d input_dir=%s",
         message.get("id", ""),
@@ -146,21 +184,21 @@ def _on_nifti_send(
 ) -> None:
     topic = (event.get("hub.topic") or "").strip()
     if not topic:
-        LOGGER.warning("TotalSegmentator onMessage: nifti-send missing hub.topic")
+        _console_error("onMessage: nifti-send missing hub.topic")
         return
 
     payloads = extract_all_nifti_send_payloads(message)
     if not payloads:
-        LOGGER.warning(
-            "TotalSegmentator onMessage: no NIfTI payload id=%s topic=%s",
+        _console_error(
+            "onMessage: no NIfTI payload id=%s topic=%s",
             message.get("id", ""),
             topic,
         )
         return
 
     product_name = getattr(provider, "product_name", "") or DEFAULT_PRODUCT_NAME
-    LOGGER.info(
-        "TotalSegmentator onMessage: nifti-send id=%s topic=%s files=%d",
+    _console_log(
+        "onMessage: nifti-send id=%s topic=%s files=%d",
         message.get("id", ""),
         topic,
         len(payloads),
@@ -206,13 +244,13 @@ def _stage_file(staging: _TopicStaging, file_name: str, data: bytes) -> None:
                 ]
                 archive.extractall(staging.input_dir)
             zip_path.unlink(missing_ok=True)
-            LOGGER.info(
-                "TotalSegmentator extracted %d file(s) from zip into %s",
+            _console_log(
+                "extracted %d file(s) from zip into %s",
                 len(members),
                 staging.input_dir,
             )
         except zipfile.BadZipFile:
-            LOGGER.exception("TotalSegmentator invalid zip: %s", zip_path)
+            _console_exception("invalid zip: %s", zip_path)
         return
 
     dest = staging.input_dir / name
@@ -240,8 +278,8 @@ def _run_segmentation_job_body(
     try:
         staged_count = _count_input_files(input_dir)
         if staged_count < 1:
-            LOGGER.warning(
-                "TotalSegmentator: no input files for topic=%s in %s",
+            _console_error(
+                "no input files for topic=%s in %s",
                 topic,
                 input_dir,
             )
@@ -261,16 +299,16 @@ def _run_segmentation_job_body(
 
         output_file = _run_totalsegmentator(cli_input, job_output, hub_event)
         if not output_file:
-            LOGGER.error(
-                "TotalSegmentator: no output for hub.event=%s topic=%s (job dir kept: %s)",
+            _console_error(
+                "no output for hub.event=%s topic=%s (job dir kept: %s)",
                 hub_event,
                 topic,
                 job_dir,
             )
             return
 
-        LOGGER.info(
-            "TotalSegmentator output hub.event=%s topic=%s: %s",
+        _console_log(
+            "output hub.event=%s topic=%s: %s",
             hub_event,
             topic,
             output_file,
@@ -284,34 +322,32 @@ def _run_segmentation_job_body(
                 product_name, topic, str(output_file)
             )
         if published:
-            LOGGER.info(
-                "TotalSegmentator published %s to topic=%s product=%s",
+            _console_log(
+                "published %s to topic=%s product=%s",
                 output_file,
                 topic,
                 product_name,
             )
         else:
-            LOGGER.warning(
-                "TotalSegmentator failed to publish %s topic=%s product=%s (active: %s)",
+            _console_error(
+                "failed to publish %s topic=%s product=%s (active: %s)",
                 output_file,
                 topic,
                 product_name,
                 ", ".join(get_active_resource_server_products()) or "(none)",
             )
     except Exception as exc:
-        LOGGER.exception(
-            "TotalSegmentator job failed topic=%s: %s", topic, exc
-        )
+        _console_exception("job failed topic=%s: %s", topic, exc)
     finally:
         if job_dir and job_dir.is_dir():
             if output_file and output_file.is_file():
                 try:
                     shutil.rmtree(job_dir)
                 except OSError as exc:
-                    LOGGER.warning("TotalSegmentator cleanup failed: %s", exc)
+                    _console_error("cleanup failed: %s", exc)
             else:
-                LOGGER.warning(
-                    "TotalSegmentator keeping job dir for inspection: %s", job_dir
+                _console_log(
+                    "keeping job dir for inspection: %s", job_dir
                 )
 
 
@@ -332,8 +368,8 @@ def _cli_input_path(input_dir: Path, hub_event: str) -> Path:
             matches = sorted(input_dir.glob(pattern))
             if matches:
                 if len(matches) > 1:
-                    LOGGER.warning(
-                        "TotalSegmentator: multiple volume files under %s, using %s",
+                    _console_log(
+                        "multiple volume files under %s, using %s",
                         input_dir,
                         matches[0],
                     )
@@ -371,7 +407,7 @@ def _total_segmentator_launch_command() -> Optional[list[str]]:
     """PythonSlicer + TotalSegmentator CLI (same pattern as Slicer extension)."""
     python_slicer = shutil.which("PythonSlicer")
     if not python_slicer:
-        LOGGER.error("TotalSegmentator: PythonSlicer not found on PATH")
+        _console_error("PythonSlicer not found on PATH")
         return None
 
     scripts_dir = sysconfig.get_path("scripts")
@@ -379,8 +415,8 @@ def _total_segmentator_launch_command() -> Optional[list[str]]:
         scripts_dir, _ts_executable_name("TotalSegmentator")
     )
     if not os.path.isfile(ts_script):
-        LOGGER.error(
-            "TotalSegmentator: CLI not found at %s (install TotalSegmentator extension)",
+        _console_error(
+            "CLI not found at %s (install TotalSegmentator extension)",
             ts_script,
         )
         return None
@@ -426,7 +462,13 @@ def _log_subprocess_output(proc: Any) -> None:
             "utf-8", errors="replace"
         ).rstrip()
         if text:
-            LOGGER.info("TotalSegmentator: %s", text)
+            print(text)
+            try:
+                import slicer
+
+                slicer.app.processEvents()
+            except ImportError:
+                pass
 
 
 def _run_totalsegmentator_subprocess(
@@ -435,7 +477,7 @@ def _run_totalsegmentator_subprocess(
     from subprocess import CalledProcessError
 
     cmd = command + options
-    LOGGER.info("TotalSegmentator launch: %s", " ".join(cmd))
+    _console_log("launch: %s", " ".join(cmd))
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
@@ -470,8 +512,8 @@ def _run_totalsegmentator(
             )
             _run_totalsegmentator_subprocess(command, options)
             elapsed = time.monotonic() - started
-            LOGGER.info(
-                "TotalSegmentator finished device=%s in %.1fs hub.event=%s output=%s",
+            _console_log(
+                "finished device=%s in %.1fs hub.event=%s output=%s",
                 device,
                 elapsed,
                 hub_event,
@@ -480,15 +522,13 @@ def _run_totalsegmentator(
             result = _find_segmentation_output(output_dir, hub_event, output_path)
             if result:
                 return result
-            LOGGER.warning(
-                "TotalSegmentator exited OK but no output for hub.event=%s under %s",
+            _console_error(
+                "exited OK but no output for hub.event=%s under %s",
                 hub_event,
                 output_dir,
             )
         except Exception as exc:
-            LOGGER.warning(
-                "TotalSegmentator failed device=%s: %s", device, exc
-            )
+            _console_error("failed device=%s: %s", device, exc)
             if output_dir.is_dir():
                 for entry in output_dir.iterdir():
                     if entry.is_file():
@@ -520,15 +560,15 @@ def _find_output_nifti(output_dir: Path) -> Optional[Path]:
         and "input" not in path.parts
     )
     if not candidates:
-        LOGGER.warning(
-            "TotalSegmentator: no NIfTI under %s (contents: %s)",
+        _console_error(
+            "no NIfTI under %s (contents: %s)",
             output_dir,
             list(output_dir.rglob("*"))[:20],
         )
         return None
     if len(candidates) > 1:
-        LOGGER.warning(
-            "TotalSegmentator: multiple NIfTI outputs, using %s (all: %s)",
+        _console_log(
+            "multiple NIfTI outputs, using %s (all: %s)",
             candidates[0],
             [str(p) for p in candidates],
         )
@@ -545,15 +585,15 @@ def _find_output_dicom(output_dir: Path) -> Optional[Path]:
         if path.is_file() and "input" not in path.parts
     ]
     if not candidates:
-        LOGGER.warning(
-            "TotalSegmentator: no .dcm under %s (contents: %s)",
+        _console_error(
+            "no .dcm under %s (contents: %s)",
             output_dir,
             list(output_dir.rglob("*"))[:20],
         )
         return None
     if len(candidates) > 1:
-        LOGGER.warning(
-            "TotalSegmentator: multiple .dcm outputs, using %s (all: %s)",
+        _console_log(
+            "multiple .dcm outputs, using %s (all: %s)",
             candidates[0],
             [str(p) for p in candidates],
         )

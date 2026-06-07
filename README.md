@@ -27,7 +27,7 @@ Cast is an offshoot of FHIRcast (<https://fhircast.hl7.org/>). FHIRcast is the s
 
 
 
-You can get a feeling for Cast with the vtk-js IO module cast interface example.  Make sure to open a few viewers and try the "Open scene views" button to experience cross-product multi-hosts display layouts:
+You can get a feeling of websocket subscription integration with the vtk-js IO module cast interface example.  Make sure to open a few viewers with different layouts and try the "Open scene views" button to experience the cross-product multi-hosts display layouts:
 **[Open live worklist demo](https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/worklist-client/examples/CastClient/index.html)**
 [![Cast worklist client](CastInterface/docs/images/worklist-client.png)](https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/worklist-client/examples/CastClient.html)
 
@@ -50,6 +50,10 @@ The hub is the server that distributes the messages and handles the data transfe
 
 Online example:  
 https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/api/hub/admin
+
+The hub can serve worklist sample studies from `CastInterface/cast_api/samples/`
+(one folder per study; catalog at `GET /api/hub/samples`). The worklist client
+shows these under organization **Hub samples**.
 
 #### Resource servers: 
 The resource server tab provides a way for other 3D slicer extensions to connect to the hub and provide their resource to the users.  Resource servers subscribe to all user topics for dicom/nifti events and send back results to the user through the hub. Developers can setup a hub in the cloud and connect the extension running on their local machine to the cloud.  The instance in their dev environment is therefore available to their test parters in the cloud without having to deploy their code.
