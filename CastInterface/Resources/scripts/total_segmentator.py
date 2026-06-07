@@ -7,12 +7,15 @@ inline, publishes, and returns.
 
 Why this is safe (cross-references to ``Lib/resource_server_hub.py``):
 
-- For ``dicom-send`` and ``nifti-send``, ``_dispatch_provider_on_message``
+- For ``dicom-send`` and ``nifti-send``, ``_dispatch_resource_server_on_message``
   already invokes the handler via ``asyncio.to_thread`` (one worker thread),
   off both the hub asyncio loop and the Slicer Qt UI thread.
+- The hub does **not** call ``fetch_all_payloads`` before those events; bytes are
+  streamed in parallel (25 concurrent GETs by default) directly into the job
+  ``input/`` directory via ``extract_all_*_send_files_to_dir`` (PNG/JPG
+  ``*-request`` handling is unchanged).
 - The hub message loop ``await``s one handler at a time per provider, so
-  ``onMessage`` calls for one provider are naturally serialized. No
-  module-level lock is needed to guard the staging dicts.
+  ``onMessage`` calls for one provider are naturally serialized.
 - The WebSocket reader runs as a separate asyncio task on the hub thread
   and keeps draining frames into ``message_queue`` while the worker is
   busy; WS receive is not blocked by TotalSegmentator subprocess execution.
@@ -29,6 +32,7 @@ Cast UI (Resource Servers): point the script path at this file.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -38,14 +42,13 @@ import sysconfig
 import tempfile
 import time
 import traceback
-import zipfile
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from Lib.cast_provider_runtime import (
-    extract_all_dicom_send_payloads,
-    extract_all_nifti_send_payloads,
+    CastPayloadTruncatedError,
+    extract_all_dicom_send_files_to_dir,
+    extract_all_nifti_send_files_to_dir,
     get_active_resource_server_products,
     publish_dicom_send_file,
     publish_nifti_send_file,
@@ -60,17 +63,21 @@ def _format_message(message: str, *args: Any) -> str:
     return message % args if args else message
 
 
+def _on_slicer_main_thread(fn: Any) -> None:
+    """Run ``fn`` on the Qt GUI thread (safe for ``showConsoleMessage``)."""
+    try:
+        import qt
+
+        qt.QTimer.singleShot(0, fn)
+    except ImportError:
+        fn()
+
+
 def _console_log(message: str, *args: Any) -> None:
     """Normal output in the Slicer Python console (default/white text)."""
     text = _format_message(message, *args).rstrip()
     if not text:
         return
-    try:
-        import slicer
-
-        slicer.app.processEvents()
-    except ImportError:
-        pass
     print(f"{_LOG_PREFIX}: {text}")
 
 
@@ -80,11 +87,19 @@ def _console_error(message: str, *args: Any) -> None:
     if not text:
         return
     line = f"{_LOG_PREFIX}: {text}"
-    try:
-        import slicer
 
-        slicer.app.showConsoleMessage(line, error=True)
-        slicer.app.processEvents()
+    def _show_red() -> None:
+        try:
+            import slicer
+
+            slicer.app.showConsoleMessage(line, True)
+        except ImportError:
+            print(line, file=sys.stderr)
+
+    try:
+        import slicer  # noqa: F401
+
+        _on_slicer_main_thread(_show_red)
     except ImportError:
         print(line, file=sys.stderr)
 
@@ -105,25 +120,56 @@ TS_MULTILABEL = True
 OUTPUT_DICOM_NAME = "segmentations.dcm"
 OUTPUT_NIFTI_NAME = "segmentations.nii.gz"
 
-# Module-level staging state. Access is naturally serialized because the
-# hub awaits one handler at a time per provider connection (see module
-# docstring). No lock is needed.
-_topic_states: Dict[str, "_TopicStaging"] = {}
-
 
 def _safe_topic_dir_name(topic: str) -> str:
     safe = re.sub(r"[^\w.\-]+", "_", topic.strip())
     return safe or "topic"
 
 
-@dataclass
-class _TopicStaging:
-    topic: str
-    product_name: str
-    input_dir: Path
+def _allocate_job_dirs(topic: str) -> Tuple[Path, Path, Path]:
+    """Create ``cast-totalseg-jobs/<topic>-<stamp>/{input,output}``."""
+    stamp = int(time.time() * 1000)
+    job_dir = (
+        Path(tempfile.gettempdir())
+        / "cast-totalseg-jobs"
+        / f"{_safe_topic_dir_name(topic)}-{stamp}"
+    )
+    job_input = job_dir / "input"
+    job_output = job_dir / "output"
+    job_input.mkdir(parents=True, exist_ok=True)
+    job_output.mkdir(parents=True, exist_ok=True)
+    return job_dir, job_input, job_output
+
+
+def _redact_message_for_log(message: Dict[str, Any]) -> Dict[str, Any]:
+    """Copy a Cast message for logging with inline byte/base64 fields redacted."""
+
+    def _redact_value(value: Any) -> Any:
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            return f"<bytes len={len(value)}>"
+        if isinstance(value, dict):
+            out: Dict[str, Any] = {}
+            for key, item in value.items():
+                if key == "data" and item is not None:
+                    if isinstance(item, str):
+                        out[key] = f"<base64 len={len(item)}>"
+                    else:
+                        out[key] = _redact_value(item)
+                else:
+                    out[key] = _redact_value(item)
+            return out
+        if isinstance(value, list):
+            return [_redact_value(item) for item in value]
+        return value
+
+    return _redact_value(message)
 
 
 def onMessage(message: Dict[str, Any], provider: Any) -> None:
+    _console_log(
+        "onMessage: received %s",
+        json.dumps(_redact_message_for_log(message), default=str),
+    )
     event = message.get("event") or {}
     hub_event = event.get("hub.event")
     if hub_event == _NIFTI_SEND_EVENT:
@@ -142,41 +188,75 @@ def _on_dicom_send(
         _console_error("onMessage: dicom-send missing hub.topic")
         return
 
-    payloads = extract_all_dicom_send_payloads(message)
-    if not payloads:
+    product_name = getattr(provider, "product_name", "") or DEFAULT_PRODUCT_NAME
+    files = (event.get("context") or {}).get("files") or []
+    if isinstance(files, list):
+        url_count = sum(
+            1
+            for entry in files
+            if isinstance(entry, dict)
+            and isinstance(entry.get("url"), str)
+            and entry["url"].strip()
+        )
+        payload_count = sum(
+            1
+            for entry in files
+            if isinstance(entry, dict)
+            and isinstance(entry.get("payloadId"), str)
+            and entry["payloadId"].strip()
+            and entry.get("data") is None
+        )
+        _console_log(
+            "onMessage: dicom-send download start id=%s topic=%s files=%d "
+            "url=%d payloadId=%d product=%s",
+            message.get("id", ""),
+            topic,
+            len(files),
+            url_count,
+            payload_count,
+            product_name,
+        )
+
+    job_dir, job_input, job_output = _allocate_job_dirs(topic)
+    _console_log(
+        "onMessage: streaming download to %s id=%s topic=%s",
+        job_input,
+        message.get("id", ""),
+        topic,
+    )
+    try:
+        file_count, total_bytes = extract_all_dicom_send_files_to_dir(
+            message, job_input, product_name
+        )
+    except CastPayloadTruncatedError as exc:
+        _console_error(
+            "onMessage: dicom-send download failed id=%s topic=%s: %s",
+            message.get("id", ""),
+            topic,
+            exc,
+        )
+        shutil.rmtree(job_dir, ignore_errors=True)
+        return
+    if file_count < 1:
         _console_error(
             "onMessage: no DICOM payload id=%s topic=%s",
             message.get("id", ""),
             topic,
         )
+        shutil.rmtree(job_dir, ignore_errors=True)
         return
-
-    product_name = getattr(provider, "product_name", "") or DEFAULT_PRODUCT_NAME
+    record_dicom_send_received(topic, total_bytes)
     _console_log(
-        "onMessage: dicom-send id=%s topic=%s files=%d",
+        "onMessage: dicom-send id=%s topic=%s files=%d bytes=%d",
         message.get("id", ""),
         topic,
-        len(payloads),
-    )
-
-    staging = _get_or_create_staging(topic, product_name)
-    for file_name, data in payloads:
-        record_dicom_send_received(topic, len(data))
-        _stage_file(staging, file_name, data)
-
-    # TEMPORARY: remove after hub download-speed testing (skips TotalSegmentator).
-    total_bytes = sum(len(data) for _, data in payloads)
-    _console_log(
-        "TEMPORARY exit after dicom download+stage id=%s topic=%s files=%d "
-        "bytes=%d input_dir=%s",
-        message.get("id", ""),
-        topic,
-        len(payloads),
+        file_count,
         total_bytes,
-        staging.input_dir,
     )
-    return
-    # _run_topic_segmentation(topic, _DICOM_SEND_EVENT)  # TEMPORARY: re-enable above
+
+    _run_segmentation_job_body(
+        topic, product_name, job_input, job_output, job_dir, _DICOM_SEND_EVENT
+    )
 
 
 def _on_nifti_send(
@@ -187,114 +267,102 @@ def _on_nifti_send(
         _console_error("onMessage: nifti-send missing hub.topic")
         return
 
-    payloads = extract_all_nifti_send_payloads(message)
-    if not payloads:
+    product_name = getattr(provider, "product_name", "") or DEFAULT_PRODUCT_NAME
+    files = (event.get("context") or {}).get("files") or []
+    if isinstance(files, list):
+        url_count = sum(
+            1
+            for entry in files
+            if isinstance(entry, dict)
+            and isinstance(entry.get("url"), str)
+            and entry["url"].strip()
+        )
+        payload_count = sum(
+            1
+            for entry in files
+            if isinstance(entry, dict)
+            and isinstance(entry.get("payloadId"), str)
+            and entry["payloadId"].strip()
+            and entry.get("data") is None
+        )
+        _console_log(
+            "onMessage: nifti-send download start id=%s topic=%s files=%d "
+            "url=%d payloadId=%d product=%s",
+            message.get("id", ""),
+            topic,
+            len(files),
+            url_count,
+            payload_count,
+            product_name,
+        )
+
+    job_dir, job_input, job_output = _allocate_job_dirs(topic)
+    _console_log(
+        "onMessage: streaming download to %s id=%s topic=%s",
+        job_input,
+        message.get("id", ""),
+        topic,
+    )
+    try:
+        file_count, total_bytes = extract_all_nifti_send_files_to_dir(
+            message, job_input, product_name
+        )
+    except CastPayloadTruncatedError as exc:
+        _console_error(
+            "onMessage: nifti-send download failed id=%s topic=%s: %s",
+            message.get("id", ""),
+            topic,
+            exc,
+        )
+        shutil.rmtree(job_dir, ignore_errors=True)
+        return
+    if file_count < 1:
         _console_error(
             "onMessage: no NIfTI payload id=%s topic=%s",
             message.get("id", ""),
             topic,
         )
+        shutil.rmtree(job_dir, ignore_errors=True)
         return
-
-    product_name = getattr(provider, "product_name", "") or DEFAULT_PRODUCT_NAME
+    record_nifti_send_received(topic, total_bytes)
     _console_log(
-        "onMessage: nifti-send id=%s topic=%s files=%d",
+        "onMessage: nifti-send id=%s topic=%s files=%d bytes=%d",
         message.get("id", ""),
         topic,
-        len(payloads),
+        file_count,
+        total_bytes,
     )
 
-    staging = _get_or_create_staging(topic, product_name)
-    for file_name, data in payloads:
-        record_nifti_send_received(topic, len(data))
-        _stage_file(staging, file_name, data)
-    _run_topic_segmentation(topic, _NIFTI_SEND_EVENT)
-
-
-def _get_or_create_staging(topic: str, product_name: str) -> _TopicStaging:
-    state = _topic_states.get(topic)
-    if state is None:
-        base = (
-            Path(tempfile.gettempdir())
-            / "cast-totalseg"
-            / _safe_topic_dir_name(topic)
-        )
-        input_dir = base / "input"
-        input_dir.mkdir(parents=True, exist_ok=True)
-        state = _TopicStaging(
-            topic=topic, product_name=product_name, input_dir=input_dir
-        )
-        _topic_states[topic] = state
-    else:
-        state.product_name = product_name
-    return state
-
-
-def _stage_file(staging: _TopicStaging, file_name: str, data: bytes) -> None:
-    name = os.path.basename(file_name.strip()) or "dicom-send.dcm"
-    if name.lower().endswith(".zip"):
-        zip_path = staging.input_dir / name
-        zip_path.write_bytes(data)
-        try:
-            with zipfile.ZipFile(zip_path, "r") as archive:
-                members = [
-                    info.filename
-                    for info in archive.infolist()
-                    if info.filename and not info.filename.endswith("/")
-                ]
-                archive.extractall(staging.input_dir)
-            zip_path.unlink(missing_ok=True)
-            _console_log(
-                "extracted %d file(s) from zip into %s",
-                len(members),
-                staging.input_dir,
-            )
-        except zipfile.BadZipFile:
-            _console_exception("invalid zip: %s", zip_path)
-        return
-
-    dest = staging.input_dir / name
-    dest.write_bytes(data)
-
-
-def _run_topic_segmentation(topic: str, hub_event: str) -> None:
-    staging = _topic_states.get(topic)
-    if staging is None:
-        return
-    staged_files = _count_input_files(staging.input_dir)
-    try:
-        _run_segmentation_job_body(
-            topic, staging.product_name, staging.input_dir, hub_event
-        )
-    finally:
-        _topic_states.pop(topic, None)
+    _run_segmentation_job_body(
+        topic, product_name, job_input, job_output, job_dir, _NIFTI_SEND_EVENT
+    )
 
 
 def _run_segmentation_job_body(
-    topic: str, product_name: str, input_dir: Path, hub_event: str
+    topic: str,
+    product_name: str,
+    job_input: Path,
+    job_output: Path,
+    job_dir: Path,
+    hub_event: str,
 ) -> None:
-    job_dir: Optional[Path] = None
     output_file: Optional[Path] = None
     try:
-        staged_count = _count_input_files(input_dir)
+        staged_count = _count_input_files(job_input)
         if staged_count < 1:
             _console_error(
                 "no input files for topic=%s in %s",
                 topic,
-                input_dir,
+                job_input,
             )
             return
 
-        stamp = int(time.time() * 1000)
-        job_dir = (
-            Path(tempfile.gettempdir())
-            / "cast-totalseg-jobs"
-            / f"{_safe_topic_dir_name(topic)}-{stamp}"
+        _console_log(
+            "starting segmentation topic=%s input=%s files=%d",
+            topic,
+            job_input,
+            staged_count,
         )
-        job_input = job_dir / "input"
-        job_output = job_dir / "output"
-        shutil.copytree(input_dir, job_input)
-        _clear_staging_input(input_dir)
         cli_input = _cli_input_path(job_input, hub_event)
 
         output_file = _run_totalsegmentator(cli_input, job_output, hub_event)
@@ -389,16 +457,6 @@ def _cli_output_path(output_dir: Path, hub_event: str) -> Path:
     raise ValueError(f"Unsupported hub.event for segmentation: {hub_event!r}")
 
 
-def _clear_staging_input(input_dir: Path) -> None:
-    if not input_dir.is_dir():
-        return
-    for entry in input_dir.iterdir():
-        if entry.is_file():
-            entry.unlink()
-        elif entry.is_dir():
-            shutil.rmtree(entry, ignore_errors=True)
-
-
 def _ts_executable_name(name: str) -> str:
     return name + ".exe" if os.name == "nt" else name
 
@@ -463,12 +521,6 @@ def _log_subprocess_output(proc: Any) -> None:
         ).rstrip()
         if text:
             print(text)
-            try:
-                import slicer
-
-                slicer.app.processEvents()
-            except ImportError:
-                pass
 
 
 def _run_totalsegmentator_subprocess(

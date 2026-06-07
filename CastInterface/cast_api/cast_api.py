@@ -2474,7 +2474,7 @@ def _prepare_websocket_fanout_text(
 
 
 def _fanout_metadata_only_binary(notification: dict) -> str:
-    """Return JSON envelope with transport fields stripped from resources/files."""
+    """Return JSON envelope with inline bytes stripped; preserve ``url`` for direct download."""
     n2 = copy.deepcopy(notification)
     ev2 = n2.get("event") or {}
     ctx = ev2.get("context")
@@ -2489,7 +2489,6 @@ def _fanout_metadata_only_binary(notification: dict) -> str:
                 cleaned = dict(entry)
                 cleaned.pop("data", None)
                 cleaned.pop("binaryTransfer", None)
-                cleaned.pop("url", None)
                 cleaned.pop("payloadId", None)
                 cleaned.pop("expiresAt", None)
                 cleaned_files.append(cleaned)
@@ -2499,7 +2498,6 @@ def _fanout_metadata_only_binary(notification: dict) -> str:
             cleaned = dict(res)
             cleaned.pop("data", None)
             cleaned.pop("binaryTransfer", None)
-            cleaned.pop("url", None)
             cleaned.pop("payloadId", None)
             cleaned.pop("expiresAt", None)
             ctx["resource"] = cleaned
@@ -2513,7 +2511,6 @@ def _fanout_metadata_only_binary(notification: dict) -> str:
             cleaned = dict(res)
             cleaned.pop("data", None)
             cleaned.pop("binaryTransfer", None)
-            cleaned.pop("url", None)
             cleaned.pop("payloadId", None)
             cleaned.pop("expiresAt", None)
             item["resource"] = cleaned

@@ -6,7 +6,7 @@ packages everything under cast_api/:
 
 - volview-client/  <- VolView/dist  (served at /volview-client/)
 - vtkjs-worklist-client/  <- vtk-js/Documentation/.vitepress/dist  (/worklist-client/)
-- OHIF-client/  <- Viewers/platform/app/dist  (hub root /)
+- OHIF-client/  <- ProjectWeek45/Viewers/platform/app/dist  (hub root /)
 
 Run from any directory:
     python CastInterface/cast_api/make_zip.py
@@ -68,14 +68,18 @@ DIST_PARTS_UNDER_REPO = {
 
 
 def find_repo_root(script_dir: Path, repo_name: str) -> Path | None:
-    """Locate VolView, vtk-js, or Viewers from cast_api upward (workspace roots)."""
+    """Locate VolView, vtk-js, or Viewers from cast_api upward (workspace roots).
+
+    Prefer ``ProjectWeek45/<repo>`` when both exist (matches build_clients.sh).
+    A sibling ``<repo>`` at the workspace root is only used as fallback.
+    """
     for base in (script_dir, *script_dir.parents):
-        direct = base / repo_name
-        if direct.is_dir():
-            return direct.resolve()
         under_pw = base / "ProjectWeek45" / repo_name
         if under_pw.is_dir():
             return under_pw.resolve()
+        direct = base / repo_name
+        if direct.is_dir():
+            return direct.resolve()
     return None
 
 

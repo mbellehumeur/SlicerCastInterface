@@ -1,6 +1,7 @@
 # Cast binary file transfer
 
-Animated walkthrough (24 s loop): [images/binary-file-transfer-animated.svg](images/binary-file-transfer-animated.svg).
+Animated walkthrough (30 s loop): [images/binary-file-transfer-animated-rs-to-id.svg](images/binary-file-transfer-animated-rs-to-id.svg) (Resource Server → Image Display).
+Inbound variant (Image Display → Resource Server): [images/binary-file-transfer-animated.svg](images/binary-file-transfer-animated.svg).
 Static diagram: [images/binary-file-transfer.svg](images/binary-file-transfer.svg).
 
 Cast carries imaging files (DICOM, NIfTI, PNG, NRRD, and similar) through a
