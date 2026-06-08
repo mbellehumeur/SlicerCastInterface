@@ -42,23 +42,18 @@ The extension features a hub and two cast interfaces: one for connecting existin
 
 
 #### Hub:
-The hub is the server that distributes the messages and handles the data transfer requests over the websocket connection to each client.
+The hub is the routing appliance that distributes the messages and handles the data transfer requests over the websocket connection to each client.
 
 ![hub](CastInterface/docs/images/hub-ui.png)
 
 ![hub portal](CastInterface/docs/images/hub-admin.png)
 
-Online example:
-https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/api/hub/admin
-
-The hub can serve worklist sample studies from `CastInterface/cast_api/samples/`
-(one folder per study; catalog at `GET /api/hub/samples`). The worklist client
-shows these under organization **Hub samples**.
+It can be used without the slicer extension by running the "cast_api.py" script. 
 
 #### Resource servers:
 
 
-Resource servers provide desktop integration of image processing. This can allow users to view AI results without having to send them to the archive first.
+Resource servers provide desktop integration of image processing services. This allow users to view AI results without having to send them to the archive first.
 
 The resource server tab provides a visual description of how processing resources can be connected to the hub and made available to cast workflows.
 Here for example, in the VolView client:
