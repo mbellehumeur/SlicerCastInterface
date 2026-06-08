@@ -128,7 +128,7 @@ VolView publishes study/series/slice data as a single **STOW batch** `dicom-send
 
 ## Cast request flow
 
-A caller uses **HTTP** to ask the hub to dispatch a **typed** request to every matching subscriber. The request body includes top-level `id` and `timestamp` (like publish). Each target receives a WebSocket message with `hub.event = <datatype>-request` and `context.id` set to that correlation id. Targets reply on `/bind/{endpoint}` with `hub.event = <datatype>-response` and the same `context.id`. The hub waits (default 10s, `CAST_REQUEST_TIMEOUT_SECONDS`) and returns one collated JSON body.
+A caller uses **HTTP** to ask the hub to dispatch a **typed** request to every matching subscriber. The request body includes top-level `id` and `timestamp` (like publish). Each target receives a WebSocket message with `hub.event = <datatype>-request` and `context.id` set to that correlation id. Targets reply on `/bind/{endpoint}` with `hub.event = <datatype>-response` and the same `context.id`. The hub waits (default 2s, `CAST_REQUEST_TIMEOUT_SECONDS`) and returns one collated JSON body.
 
 **Entry point:** `POST /api/hub/request`
 
@@ -169,9 +169,9 @@ sequenceDiagram
 | Field | Role |
 |-------|------|
 | `subscriber.name` | Requester identity (must have a subscription; should be WS-connected) |
-| `event.hub.event` | Required `*-request` event name (for example `fhircastcontext-request`); hub dispatches this name as-is |
+| `event.hub.event` | Required `*-request` event name (for example `status-request`); hub dispatches this name as-is |
 | `event.hub.topic` | Optional; all matches must use this hub topic |
-| `event.context.dataType` | Optional handler token (for example `FHIRcastContext`, `PNGFULLSIZE`); copied into WS fan-out `context` |
+| `event.context.dataType` | Optional handler token (for example `STATUS`, `PNGFULLSIZE`); copied into WS fan-out `context` |
 | `subscriber.actor` | Source / requester role (included on forwarded WS events) |
 | `target.actor` | Destination filter: subscription `actors` must include this keyword; omitted or `*` = all roles on topic. On POST request body, if `target.actor` is absent, `subscriber.actor` may be used as the filter. WS fan-out uses the same keys. |
 | `productName` | Optional filter on `client_info.productName`; `*` means any |
@@ -185,8 +185,8 @@ sequenceDiagram
   "subscriber.name": "VolView-ABC123",
   "event": {
     "hub.topic": "my-topic",
-    "hub.event": "fhircastcontext-request",
-    "context": { "dataType": "FHIRcastContext" }
+    "hub.event": "status-request",
+    "context": { "dataType": "STATUS" }
   },
   "subscriber.actor": "WORKLIST_CLIENT",
   "target.actor": "WORKLIST_CLIENT"

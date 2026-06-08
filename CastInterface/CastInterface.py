@@ -31,7 +31,7 @@ class CastInterface(ScriptedLoadableModule):
             The script handles producing the results from the DICOM files received.
             <br><br>
             Image Display Client:
-            The image display client provide a PACS client type interface to the 3D slicer viewer.  Supported events are ImagingStudy-open, ImagingStudy-close, fhircastcontext-request, and sceneview-request.
+            The image display client provide a PACS client type interface to the 3D slicer viewer.  Supported events are ImagingStudy-open, ImagingStudy-close, and status-request.
             <br><br>
             Hub:
             The hub is the server that distributes the messages and handles the data transfer requests over the websocket connection to each client.

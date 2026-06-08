@@ -91,9 +91,9 @@ from cast_filename_policy import (
 )
 from hub_metrics import collect_hub_metrics
 
-# Default cast-request fan-out timeout (seconds). Was 5s; bumped because
-# multiple subscribers may now respond to the same request.
-CAST_REQUEST_TIMEOUT_SECONDS = float(os.getenv("CAST_REQUEST_TIMEOUT_SECONDS", "10"))
+# Default cast-request fan-out timeout (seconds). Collated HTTP reply returns
+# when all targets respond or this cap is reached (partial + timedOut ok).
+CAST_REQUEST_TIMEOUT_SECONDS = float(os.getenv("CAST_REQUEST_TIMEOUT_SECONDS", "2"))
 
 # Hub-generated lifecycle event (not FHIRcast catalog); fan-out to peers on same topic.
 SUBSCRIPTION_REMOVED_EVENT = "subscription-removed"

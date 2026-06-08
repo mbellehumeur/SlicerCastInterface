@@ -114,6 +114,22 @@ def _console_exception(message: str, *args: Any) -> None:
 DEFAULT_PRODUCT_NAME = "TOTALSEG"
 _DICOM_SEND_EVENT = "dicom-send"
 _NIFTI_SEND_EVENT = "nifti-send"
+_job_busy = False
+
+
+def build_status_response(provider: Any) -> Dict[str, Any]:
+    """Return ``status-response`` payload (``resource_server_hub`` calls this)."""
+    product_name = getattr(provider, "product_name", "") or DEFAULT_PRODUCT_NAME
+    items: list[Dict[str, str]] = [
+        {"key": "availability", "value": "online"},
+    ]
+    if _job_busy:
+        items.append({"key": "job", "value": "running"})
+    return {
+        "source": "status",
+        "product": product_name,
+        "items": items,
+    }
 TS_TASK = "total"
 # ``--fast`` breaks DICOM RT Struct export (mask z vs series slice count).
 TS_FAST = False
@@ -184,133 +200,143 @@ def onMessage(message: Dict[str, Any], provider: Any) -> None:
 def _on_dicom_send(
     message: Dict[str, Any], event: Dict[str, Any], provider: Any
 ) -> None:
+    global _job_busy
     topic = (event.get("hub.topic") or "").strip()
     if not topic:
         _console_error("onMessage: dicom-send missing hub.topic")
         return
 
     product_name = getattr(provider, "product_name", "") or DEFAULT_PRODUCT_NAME
-    files = (event.get("context") or {}).get("files") or []
-    if isinstance(files, list):
-        url_count, payload_files, chunk_count = stow_files_pending_stats(files)
-        _console_log(
-            "onMessage: dicom-send download start id=%s topic=%s files=%d "
-            "url=%d payloadFiles=%d chunks=%d product=%s",
-            message.get("id", ""),
-            topic,
-            len(files),
-            url_count,
-            payload_files,
-            chunk_count,
-            product_name,
-        )
-
-    job_dir, job_input, job_output = _allocate_job_dirs(topic)
-    _console_log(
-        "onMessage: streaming download to %s id=%s topic=%s",
-        job_input,
-        message.get("id", ""),
-        topic,
-    )
+    _job_busy = True
     try:
-        file_count, total_bytes = extract_all_dicom_send_files_to_dir(
-            message, job_input, product_name
-        )
-    except CastPayloadTruncatedError as exc:
-        _console_error(
-            "onMessage: dicom-send download failed id=%s topic=%s: %s",
-            message.get("id", ""),
-            topic,
-            exc,
-        )
-        shutil.rmtree(job_dir, ignore_errors=True)
-        return
-    if file_count < 1:
-        _console_error(
-            "onMessage: no DICOM payload id=%s topic=%s",
-            message.get("id", ""),
-            topic,
-        )
-        shutil.rmtree(job_dir, ignore_errors=True)
-        return
-    record_dicom_send_received(topic, total_bytes)
-    _console_log(
-        "onMessage: dicom-send id=%s topic=%s files=%d bytes=%d",
-        message.get("id", ""),
-        topic,
-        file_count,
-        total_bytes,
-    )
+        files = (event.get("context") or {}).get("files") or []
+        if isinstance(files, list):
+            url_count, payload_files, chunk_count = stow_files_pending_stats(files)
+            _console_log(
+                "onMessage: dicom-send download start id=%s topic=%s files=%d "
+                "url=%d payloadFiles=%d chunks=%d product=%s",
+                message.get("id", ""),
+                topic,
+                len(files),
+                url_count,
+                payload_files,
+                chunk_count,
+                product_name,
+            )
 
-    _run_segmentation_job_body(
-        topic, product_name, job_input, job_output, job_dir, _DICOM_SEND_EVENT
-    )
+        job_dir, job_input, job_output = _allocate_job_dirs(topic)
+        _console_log(
+            "onMessage: streaming download to %s id=%s topic=%s",
+            job_input,
+            message.get("id", ""),
+            topic,
+        )
+        try:
+            file_count, total_bytes = extract_all_dicom_send_files_to_dir(
+                message, job_input, product_name
+            )
+        except CastPayloadTruncatedError as exc:
+            _console_error(
+                "onMessage: dicom-send download failed id=%s topic=%s: %s",
+                message.get("id", ""),
+                topic,
+                exc,
+            )
+            shutil.rmtree(job_dir, ignore_errors=True)
+            return
+        if file_count < 1:
+            _console_error(
+                "onMessage: no DICOM payload id=%s topic=%s",
+                message.get("id", ""),
+                topic,
+            )
+            shutil.rmtree(job_dir, ignore_errors=True)
+            return
+        record_dicom_send_received(topic, total_bytes)
+        _console_log(
+            "onMessage: dicom-send id=%s topic=%s files=%d bytes=%d",
+            message.get("id", ""),
+            topic,
+            file_count,
+            total_bytes,
+        )
+
+        _run_segmentation_job_body(
+            topic, product_name, job_input, job_output, job_dir, _DICOM_SEND_EVENT
+        )
+    finally:
+        _job_busy = False
 
 
 def _on_nifti_send(
     message: Dict[str, Any], event: Dict[str, Any], provider: Any
 ) -> None:
+    global _job_busy
     topic = (event.get("hub.topic") or "").strip()
     if not topic:
         _console_error("onMessage: nifti-send missing hub.topic")
         return
 
     product_name = getattr(provider, "product_name", "") or DEFAULT_PRODUCT_NAME
-    files = (event.get("context") or {}).get("files") or []
-    if isinstance(files, list):
-        url_count, payload_files, chunk_count = stow_files_pending_stats(files)
-        _console_log(
-            "onMessage: nifti-send download start id=%s topic=%s files=%d "
-            "url=%d payloadFiles=%d chunks=%d product=%s",
-            message.get("id", ""),
-            topic,
-            len(files),
-            url_count,
-            payload_files,
-            chunk_count,
-            product_name,
-        )
-
-    job_dir, job_input, job_output = _allocate_job_dirs(topic)
-    _console_log(
-        "onMessage: streaming download to %s id=%s topic=%s",
-        job_input,
-        message.get("id", ""),
-        topic,
-    )
+    _job_busy = True
     try:
-        file_count, total_bytes = extract_all_nifti_send_files_to_dir(
-            message, job_input, product_name
-        )
-    except CastPayloadTruncatedError as exc:
-        _console_error(
-            "onMessage: nifti-send download failed id=%s topic=%s: %s",
-            message.get("id", ""),
-            topic,
-            exc,
-        )
-        shutil.rmtree(job_dir, ignore_errors=True)
-        return
-    if file_count < 1:
-        _console_error(
-            "onMessage: no NIfTI payload id=%s topic=%s",
-            message.get("id", ""),
-            topic,
-        )
-        shutil.rmtree(job_dir, ignore_errors=True)
-        return
-    record_nifti_send_received(topic, total_bytes)
-    _console_log(
-        "onMessage: nifti-send id=%s topic=%s files=%d bytes=%d",
-        message.get("id", ""),
-        topic,
-        file_count,
-        total_bytes,
-    )
+        files = (event.get("context") or {}).get("files") or []
+        if isinstance(files, list):
+            url_count, payload_files, chunk_count = stow_files_pending_stats(files)
+            _console_log(
+                "onMessage: nifti-send download start id=%s topic=%s files=%d "
+                "url=%d payloadFiles=%d chunks=%d product=%s",
+                message.get("id", ""),
+                topic,
+                len(files),
+                url_count,
+                payload_files,
+                chunk_count,
+                product_name,
+            )
 
-    _run_segmentation_job_body(
-        topic, product_name, job_input, job_output, job_dir, _NIFTI_SEND_EVENT
-    )
+        job_dir, job_input, job_output = _allocate_job_dirs(topic)
+        _console_log(
+            "onMessage: streaming download to %s id=%s topic=%s",
+            job_input,
+            message.get("id", ""),
+            topic,
+        )
+        try:
+            file_count, total_bytes = extract_all_nifti_send_files_to_dir(
+                message, job_input, product_name
+            )
+        except CastPayloadTruncatedError as exc:
+            _console_error(
+                "onMessage: nifti-send download failed id=%s topic=%s: %s",
+                message.get("id", ""),
+                topic,
+                exc,
+            )
+            shutil.rmtree(job_dir, ignore_errors=True)
+            return
+        if file_count < 1:
+            _console_error(
+                "onMessage: no NIfTI payload id=%s topic=%s",
+                message.get("id", ""),
+                topic,
+            )
+            shutil.rmtree(job_dir, ignore_errors=True)
+            return
+        record_nifti_send_received(topic, total_bytes)
+        _console_log(
+            "onMessage: nifti-send id=%s topic=%s files=%d bytes=%d",
+            message.get("id", ""),
+            topic,
+            file_count,
+            total_bytes,
+        )
+
+        _run_segmentation_job_body(
+            topic, product_name, job_input, job_output, job_dir, _NIFTI_SEND_EVENT
+        )
+    finally:
+        _job_busy = False
 
 
 def _run_segmentation_job_body(
