@@ -1,0 +1,16 @@
+{
+  "id": "MRBrainSEG",
+  "name": "MR Brain SEG",
+  "description": "Simulated SEG AI result for MR Brain",
+  "openMode": "dicom-url",
+  "format": "DICOM",
+  "openDisabled": true,
+  "size": "1 MB",
+  "files": [
+    {
+      "fileName": "aseg-seg.dcm",
+      "mimeType": "application/dicom",
+      "label": "MR Brain SEG"
+    }
+  ]
+}

@@ -62,6 +62,8 @@ For DICOM files, the DICOM metadata of each file is therefore available before t
 
 The file and DICOM metadata information has to be created by the client publishing the event since the hub does open contaxt data.  
 
+When the resource server has the same data access as the image display, like the in vtk-js worklist example where all data is online, the image display does not have to send the binary files.  Oly the json message is sent and the resource server downloads the input data itself and sends the result binaries back to the image display as shown below.
+
 
 Resource servers (e.g. TotalSegmentator) receive metadata on the socket, then
 `fetch_all_payloads` fills `files[].data` before your `onMessage` script runs.
@@ -69,7 +71,7 @@ Resource servers (e.g. TotalSegmentator) receive metadata on the socket, then
 Full description: [binary-file-transfer.md](binary-file-transfer.md).
 
 <p align="center">
-  <img src="images/binary-file-transfer-animated.svg" alt="Binary file transfer (animated)" width="100%">
+  <img src="images/binary-file-transfer-animated-rs-to-id.svg" alt="Binary file transfer — result to viewer (animated)" width="100%">
 </p>
 
 The hub filename policy is the [following](filename-policy.md).

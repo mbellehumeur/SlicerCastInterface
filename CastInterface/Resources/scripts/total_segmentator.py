@@ -55,6 +55,7 @@ from Lib.cast_provider_runtime import (
     record_dicom_send_received,
     record_nifti_send_received,
 )
+from Lib.cast_client import stow_files_pending_stats
 
 _LOG_PREFIX = "TotalSegmentator"
 
@@ -191,29 +192,16 @@ def _on_dicom_send(
     product_name = getattr(provider, "product_name", "") or DEFAULT_PRODUCT_NAME
     files = (event.get("context") or {}).get("files") or []
     if isinstance(files, list):
-        url_count = sum(
-            1
-            for entry in files
-            if isinstance(entry, dict)
-            and isinstance(entry.get("url"), str)
-            and entry["url"].strip()
-        )
-        payload_count = sum(
-            1
-            for entry in files
-            if isinstance(entry, dict)
-            and isinstance(entry.get("payloadId"), str)
-            and entry["payloadId"].strip()
-            and entry.get("data") is None
-        )
+        url_count, payload_files, chunk_count = stow_files_pending_stats(files)
         _console_log(
             "onMessage: dicom-send download start id=%s topic=%s files=%d "
-            "url=%d payloadId=%d product=%s",
+            "url=%d payloadFiles=%d chunks=%d product=%s",
             message.get("id", ""),
             topic,
             len(files),
             url_count,
-            payload_count,
+            payload_files,
+            chunk_count,
             product_name,
         )
 
@@ -270,29 +258,16 @@ def _on_nifti_send(
     product_name = getattr(provider, "product_name", "") or DEFAULT_PRODUCT_NAME
     files = (event.get("context") or {}).get("files") or []
     if isinstance(files, list):
-        url_count = sum(
-            1
-            for entry in files
-            if isinstance(entry, dict)
-            and isinstance(entry.get("url"), str)
-            and entry["url"].strip()
-        )
-        payload_count = sum(
-            1
-            for entry in files
-            if isinstance(entry, dict)
-            and isinstance(entry.get("payloadId"), str)
-            and entry["payloadId"].strip()
-            and entry.get("data") is None
-        )
+        url_count, payload_files, chunk_count = stow_files_pending_stats(files)
         _console_log(
             "onMessage: nifti-send download start id=%s topic=%s files=%d "
-            "url=%d payloadId=%d product=%s",
+            "url=%d payloadFiles=%d chunks=%d product=%s",
             message.get("id", ""),
             topic,
             len(files),
             url_count,
-            payload_count,
+            payload_files,
+            chunk_count,
             product_name,
         )
 

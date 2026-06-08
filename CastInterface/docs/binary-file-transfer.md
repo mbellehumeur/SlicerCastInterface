@@ -11,16 +11,16 @@ short-lived in-memory file store—not a PACS or long-term archive.
 **Two steps for every file:**
 
 1. **Notify** — Publisher sends metadata (and uploads bytes) over HTTP. The hub
-   fans out one **text-only** WebSocket message listing `payloadId` per file.
+   fans out one **text-only** WebSocket message listing `payloadIds[]` per file.
 2. **Download** — Each subscriber pulls bytes when ready via
-   `GET /api/hub/payloads/{payloadId}` and attaches them locally to
-   `event.context.files[]`.
+   `GET /api/hub/payloads/{payloadId}` (one GET per chunk), reassembles chunks,
+   and attaches the full file to `event.context.files[]`.
 
 Subscribers never auto-download inside the Cast client library; the application
 (or Slicer `resource_server_hub.py`) calls `fetch_all_payloads` / `fetchAllPayloads`
 before handling the event.
 
-Authoritative hub code: `VolView/server/cast_api/cast_api.py`. Matching clients:
+Authoritative hub code: `CastInterface/cast_api/cast_api.py`. Matching clients:
 vtk-js `Sources/IO/Core/CastClient/`, VolView `src/io/cast-client.ts`, OHIF
 `extensions/cast`, Slicer `CastInterface/Lib/cast_client.py`.
 
@@ -32,7 +32,7 @@ Filename rules when storing bytes: `VolView/server/cast_api/filename-policy.md`.
 
 | Concern | Approach |
 |---------|----------|
-| Keep `/bind/{endpoint}` JSON-safe and small | WS carries metadata + `payloadId` only |
+| Keep `/bind/{endpoint}` JSON-safe and small | WS carries metadata + `payloadIds[]` only |
 | Move hundreds of DICOM slices efficiently | One publish → one WS message → N parallel GETs |
 | Let receivers control memory and timing | Download is explicit, not on every WS frame |
 | Resource servers behind firewalls | Outbound WSS + HTTPS only to the hub |
@@ -100,9 +100,11 @@ A **single** file is still a STOW batch with **`files.length === 1`**.
 
 - HTTP: `{"status":"received"}`
 - WebSocket (one message per publish): same Cast envelope, but each `files[]`
-  entry gains hub-assigned **`payloadId`** and **`expiresAt`** (no inline bytes)
+  entry gains hub-assigned **`payloadIds[]`**, **`chunkByteLengths[]`**, and
+  **`expiresAt`** (no inline bytes). Files larger than 4 MiB are split into
+  multiple stored chunks; small files use **`payloadIds.length === 1`**.
 
-Example fan-out fragment:
+Example fan-out fragment (single small file):
 
 ```json
 "context": {
@@ -110,12 +112,28 @@ Example fan-out fragment:
     {
       "fileName": "slice-001.dcm",
       "byteLength": 527198,
-      "payloadId": "rmRT3Zu3Ju1Riv7ZDX8lbvkVwWoLEonPXHSgjmUELyY",
+      "payloadIds": ["rmRT3Zu3Ju1Riv7ZDX8lbvkVwWoLEonPXHSgjmUELyY"],
+      "chunkByteLengths": [527198],
       "expiresAt": "2026-05-30T12:00:00.000Z"
     }
   ]
 }
 ```
+
+Example fan-out fragment (large file split into 4 MiB chunks):
+
+```json
+{
+  "fileName": "study.nii.gz",
+  "byteLength": 52581557,
+  "payloadIds": ["abc...", "def...", "..."],
+  "chunkByteLengths": [4194304, 4194304, 4194304, 1048573],
+  "expiresAt": "2026-06-06T12:00:00.000Z"
+}
+```
+
+Receivers still accept legacy singular **`payloadId`** during rollout (treated as
+`payloadIds: [id]` with chunk size = `byteLength`).
 
 Plain **JSON** `POST /api/hub/` (no multipart) remains for subscribe, typed
 requests, and metadata-only notifications. Embedding file bytes in JSON for a
@@ -162,14 +180,14 @@ sequenceDiagram
     participant Client as Cast client
     participant App as onMessage
 
-    Hub->>WS: hub.event + files[].payloadId
+    Hub->>WS: hub.event + files[].payloadIds[]
     WS->>Client: message (no bytes)
     Client->>Client: fetch_all_payloads (parallel GETs)
-    loop Each payloadId
+    loop Each chunk payloadId
         Client->>Hub: GET /api/hub/payloads/{id}
-        Hub-->>Client: file bytes
+        Hub-->>Client: chunk bytes
     end
-    Client->>Client: files[].data filled in place
+    Client->>Client: reassemble chunks, files[].data filled in place
     Client->>App: enriched message
 ```
 
@@ -201,10 +219,11 @@ parallel `fetch`.
 
 | Item | Detail |
 |------|--------|
-| **GET** | `/api/hub/payloads/{payloadId}` — streamed in 4 MiB chunks (configurable) |
+| **GET** | `/api/hub/payloads/{payloadId}` — one stored chunk per token; streamed in 4 MiB read chunks (configurable) |
+| **Store split** | `CAST_HUB_HTTP_PAYLOAD_STORE_CHUNK_BYTES` (default 4 MiB; `0` = one chunk per file) |
 | **TTL** | `CAST_HUB_HTTP_PAYLOAD_TTL_SECONDS` (default 300 s) |
 | **Cap** | `CAST_HUB_HTTP_PAYLOAD_MAX_TOTAL_BYTES` (default 2 GiB) |
-| **Overflow** | Metadata-only fan-out (no `payloadId`); message is not dropped |
+| **Overflow** | Metadata-only fan-out (no `payloadIds`); message is not dropped |
 | **GET auth** | Token optional today; upload requires Bearer |
 
 Hub log `Served http payload … elapsed=0.00s` is time to read from memory inside
@@ -218,7 +237,7 @@ VolView sends a study or series as **one** `dicom-send` STOW batch:
 
 1. Build `context.files[]` (`build-dicom-stow-manifest.ts`).
 2. Client uploads manifest + one `application/dicom` part per slice.
-3. Receivers download all `payloadId`s, then run segmentation or other logic.
+3. Receivers download all chunk `payloadIds`, reassemble each file, then run segmentation or other logic.
 
 ---
 

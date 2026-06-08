@@ -39,6 +39,10 @@ Environment (multipart binary payload store):
         Soft cap on total in-flight stored payload bytes (default 2 GiB).
         Registrations beyond this cap fan out metadata-only JSON (no
         payloadId; the message is never dropped).
+    CAST_HUB_HTTP_PAYLOAD_STORE_CHUNK_BYTES
+        Max bytes per stored payload chunk (default 4 MiB). Files larger
+        than this are split; fan-out uses context.files[].payloadIds[] and
+        chunkByteLengths[]. Set to 0 to store each file as a single chunk.
 
 Environment (binary transfer filename policy, default on):
     CAST_HUB_FILENAME_POLICY
@@ -165,8 +169,9 @@ def _env_positive_int(name: str, default: int) -> int:
 
 # Multipart binary ingest: publishers POST ``multipart/related`` (Cast JSON +
 # file parts). The hub stores bytes under short-lived ``payloadId`` values and
-# fans out text-only WebSocket JSON with ``context.files[].payloadId``. Subscribers
-# GET ``/api/hub/payloads/{payloadId}`` when the application chooses to download.
+# fans out text-only WebSocket JSON with ``context.files[].payloadIds[]`` and
+# ``chunkByteLengths[]``. Subscribers GET ``/api/hub/payloads/{payloadId}``
+# when the application chooses to download.
 CAST_HUB_HTTP_PAYLOAD_TTL_SECONDS = _env_positive_int(
     "CAST_HUB_HTTP_PAYLOAD_TTL_SECONDS", 300
 )
@@ -174,6 +179,11 @@ CAST_HUB_HTTP_PAYLOAD_TTL_SECONDS = _env_positive_int(
 # this, the hub strips the http marker and fans out metadata-only JSON.
 CAST_HUB_HTTP_PAYLOAD_MAX_TOTAL_BYTES = _env_positive_int(
     "CAST_HUB_HTTP_PAYLOAD_MAX_TOTAL_BYTES", 2 * 1024 * 1024 * 1024
+)
+# Max bytes per in-memory stored chunk. Larger STOW files are split into
+# multiple payloadId entries on fan-out (default 4 MiB). 0 = one chunk per file.
+CAST_HUB_HTTP_PAYLOAD_STORE_CHUNK_BYTES = _env_positive_int(
+    "CAST_HUB_HTTP_PAYLOAD_STORE_CHUNK_BYTES", 4 * 1024 * 1024
 )
 # Chunk size when streaming GET /api/hub/payloads/{token} bodies. Avoids
 # Response(content=bytes) which can be throttled by BaseHTTPMiddleware-style
@@ -2365,12 +2375,19 @@ def _context_files_from_notification(notification: dict) -> List[dict]:
     return [entry for entry in files if isinstance(entry, dict)]
 
 
+def _split_store_chunks(raw: bytes, chunk_size: int) -> List[bytes]:
+    """Split ``raw`` into storage chunks (one chunk when ``chunk_size <= 0``)."""
+    if chunk_size <= 0 or len(raw) <= chunk_size:
+        return [raw]
+    return [raw[offset : offset + chunk_size] for offset in range(0, len(raw), chunk_size)]
+
+
 def _rewrite_files_with_payload_ids(
     notification: dict,
     blobs: List[bytes],
-    registrations: List[Optional[Tuple[str, datetime]]],
+    file_registrations: List[Optional[Dict[str, Any]]],
 ) -> str:
-    """Build WS text JSON with hub-added ``payloadId`` on each ``context.files[]`` entry."""
+    """Build WS text JSON with hub-added ``payloadIds[]`` on each ``context.files[]`` entry."""
     n2 = copy.deepcopy(notification)
     ev2 = n2.get("event") or {}
     ctx = ev2.get("context")
@@ -2387,14 +2404,16 @@ def _rewrite_files_with_payload_ids(
         stripped.pop("data", None)
         stripped.pop("binaryTransfer", None)
         stripped.pop("url", None)
+        stripped.pop("payloadId", None)
         stripped["byteLength"] = len(raw)
-        registered = registrations[idx] if idx < len(registrations) else None
+        registered = file_registrations[idx] if idx < len(file_registrations) else None
         if registered is not None:
-            payload_id, expires_at = registered
-            stripped["payloadId"] = payload_id
-            stripped["expiresAt"] = expires_at.isoformat()
+            stripped["payloadIds"] = list(registered["payloadIds"])
+            stripped["chunkByteLengths"] = list(registered["chunkByteLengths"])
+            stripped["expiresAt"] = registered["expiresAt"]
         else:
-            stripped.pop("payloadId", None)
+            stripped.pop("payloadIds", None)
+            stripped.pop("chunkByteLengths", None)
             stripped.pop("expiresAt", None)
         files[idx] = stripped
     return json.dumps(n2)
@@ -2404,7 +2423,7 @@ def _prepare_stow_batch_fanout(
     notification: dict,
     blobs: List[bytes],
 ) -> str:
-    """Store each DICOM part and fan out one message with ``context.files[]`` payloadIds."""
+    """Store each STOW file (split into chunks) and fan out ``payloadIds[]`` per file."""
     files = _context_files_from_notification(notification)
     if len(files) != len(blobs):
         raise HTTPException(
@@ -2417,35 +2436,59 @@ def _prepare_stow_batch_fanout(
 
     _enforce_binary_transfer_filenames(notification, require_name=True)
 
-    registrations: List[Optional[Tuple[str, datetime]]] = []
-    stored_count = 0
+    chunk_size = CAST_HUB_HTTP_PAYLOAD_STORE_CHUNK_BYTES
+    file_registrations: List[Optional[Dict[str, Any]]] = []
+    total_chunks = 0
+    stored_chunks = 0
     for idx, raw in enumerate(blobs):
         entry = files[idx]
         file_name = str(entry.get("fileName") or "").strip()
         mime_type = str(entry.get("mimeType") or "application/dicom").strip()
-        registered = _http_payload_store.register(
-            raw,
-            file_name=file_name,
-            mime_type=mime_type or "application/dicom",
-            ttl_seconds=CAST_HUB_HTTP_PAYLOAD_TTL_SECONDS,
-            max_total_bytes=CAST_HUB_HTTP_PAYLOAD_MAX_TOTAL_BYTES,
-        )
-        registrations.append(registered)
-        if registered is not None:
-            stored_count += 1
-            payload_id, _expires_at = registered
+        chunks = _split_store_chunks(raw, chunk_size)
+        total_chunks += len(chunks)
+        payload_ids: List[str] = []
+        chunk_byte_lengths: List[int] = []
+        expires_at: Optional[datetime] = None
+        file_ok = True
+        for chunk_idx, chunk in enumerate(chunks):
+            registered = _http_payload_store.register(
+                chunk,
+                file_name=file_name,
+                mime_type=mime_type or "application/dicom",
+                ttl_seconds=CAST_HUB_HTTP_PAYLOAD_TTL_SECONDS,
+                max_total_bytes=CAST_HUB_HTTP_PAYLOAD_MAX_TOTAL_BYTES,
+            )
+            if registered is None:
+                file_ok = False
+                break
+            payload_id, chunk_expires_at = registered
+            payload_ids.append(payload_id)
+            chunk_byte_lengths.append(len(chunk))
+            expires_at = chunk_expires_at
+            stored_chunks += 1
             cast_hub.log(
-                f"Stored STOW payload payloadId={payload_id[:8]}... "
-                f"bytes={len(raw)} index={idx} "
+                f"Stored STOW chunk payloadId={payload_id[:8]}... "
+                f"bytes={len(chunk)} index={idx} "
+                f"chunk={chunk_idx + 1}/{len(chunks)} "
                 f"file={file_name or '(unnamed)'}"
             )
+        if file_ok and expires_at is not None:
+            file_registrations.append(
+                {
+                    "payloadIds": payload_ids,
+                    "chunkByteLengths": chunk_byte_lengths,
+                    "expiresAt": expires_at.isoformat(),
+                }
+            )
+        else:
+            file_registrations.append(None)
 
-    if stored_count == len(blobs):
-        return _rewrite_files_with_payload_ids(notification, blobs, registrations)
+    if stored_chunks == total_chunks and all(r is not None for r in file_registrations):
+        return _rewrite_files_with_payload_ids(notification, blobs, file_registrations)
 
     cast_hub.log(
         "STOW payload store partially unavailable "
-        f"(stored={stored_count}/{len(blobs)} "
+        f"(stored={stored_chunks}/{total_chunks} "
         f"inflight={_http_payload_store.total_bytes()}B "
         f"cap={CAST_HUB_HTTP_PAYLOAD_MAX_TOTAL_BYTES}B), "
         "fanning out metadata-only for this publish"
@@ -2460,8 +2503,8 @@ def _prepare_websocket_fanout_text(
 ) -> str:
     """
     WebSocket fan-out is text-only. STOW batch publishes store each file and
-    rewrite ``context.files[].payloadId``; metadata-only binary-family events
-    fan out without a payloadId.
+    rewrite ``context.files[].payloadIds[]``; metadata-only binary-family events
+    fan out without payload ids.
     """
     event = notification.get("event") or {}
     if not is_cast_binary_event(event.get("hub.event")):
@@ -2490,6 +2533,8 @@ def _fanout_metadata_only_binary(notification: dict) -> str:
                 cleaned.pop("data", None)
                 cleaned.pop("binaryTransfer", None)
                 cleaned.pop("payloadId", None)
+                cleaned.pop("payloadIds", None)
+                cleaned.pop("chunkByteLengths", None)
                 cleaned.pop("expiresAt", None)
                 cleaned_files.append(cleaned)
             ctx["files"] = cleaned_files
@@ -2499,6 +2544,8 @@ def _fanout_metadata_only_binary(notification: dict) -> str:
             cleaned.pop("data", None)
             cleaned.pop("binaryTransfer", None)
             cleaned.pop("payloadId", None)
+            cleaned.pop("payloadIds", None)
+            cleaned.pop("chunkByteLengths", None)
             cleaned.pop("expiresAt", None)
             ctx["resource"] = cleaned
     elif isinstance(ctx, list):
@@ -2512,6 +2559,8 @@ def _fanout_metadata_only_binary(notification: dict) -> str:
             cleaned.pop("data", None)
             cleaned.pop("binaryTransfer", None)
             cleaned.pop("payloadId", None)
+            cleaned.pop("payloadIds", None)
+            cleaned.pop("chunkByteLengths", None)
             cleaned.pop("expiresAt", None)
             item["resource"] = cleaned
     return json.dumps(n2)
