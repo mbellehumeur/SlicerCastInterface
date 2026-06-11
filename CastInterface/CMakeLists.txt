@@ -12,6 +12,8 @@ set(MODULE_PYTHON_SCRIPTS
   Lib/image_display_client_handler.py
   Lib/image_display_client_hub.py
   Lib/image_display_client_load.py
+  Lib/image_display_client_requests.py
+  Lib/build_sceneview_response.py
   Lib/imaging_study_context.py
   Lib/resource_server_hub.py
   Lib/__init__.py

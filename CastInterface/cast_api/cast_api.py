@@ -935,6 +935,23 @@ def _subscription_accepts_target_product(sub: Dict, target_product_name: str) ->
     return _subscription_product_name(sub) == target_product_name
 
 
+def _target_subscriber_name_from_payload(payload: Dict) -> str:
+    """Destination subscriber filter (``target.subscriber.name`` on publish)."""
+    raw = payload.get("target.subscriber.name")
+    if raw is None:
+        return ""
+    return str(raw).strip()
+
+
+def _subscription_accepts_target_subscriber(
+    sub: Dict, target_subscriber_name: str
+) -> bool:
+    if not target_subscriber_name or target_subscriber_name == "*":
+        return True
+    sub_name = str(sub.get("subscriber") or "").strip()
+    return sub_name.lower() == target_subscriber_name.lower()
+
+
 def _target_actor_from_payload(payload: Dict) -> str:
     """Destination filter from publish payload (``target.actor`` on envelope root)."""
     return _normalize_target_actor(payload.get("target.actor"))
@@ -2850,7 +2867,23 @@ async def _handle_publish_notification(
     if not topic_name:
         raise HTTPException(status_code=400, detail="Missing event.hub.topic for publish request")
 
-    cast_hub.log(f"Received message ID: {message_id} for topic {topic_name}, event: {event_type}")
+    publish_target_actor = _target_actor_from_payload(notification)
+    publish_target_product = _target_product_name_from_payload(notification)
+    publish_target_subscriber = _target_subscriber_name_from_payload(notification)
+    target_log_parts = []
+    if publish_target_product:
+        target_log_parts.append(f"target.product.name={publish_target_product}")
+    if publish_target_subscriber:
+        target_log_parts.append(f"target.subscriber.name={publish_target_subscriber}")
+    if publish_target_actor:
+        target_log_parts.append(f"target.actor={publish_target_actor}")
+    target_log_suffix = (
+        f" ({', '.join(target_log_parts)})" if target_log_parts else ""
+    )
+    cast_hub.log(
+        f"Received message ID: {message_id} for topic {topic_name}, "
+        f"event: {event_type}{target_log_suffix}"
+    )
 
     # Broadcast to subscribers (sync method, but WebSocket sending needs async)
     context = event.get("context", {})
@@ -2888,15 +2921,16 @@ async def _handle_publish_notification(
     sent_endpoints = set()
     
     # Send to matching subscriptions
-    publish_target_actor = _target_actor_from_payload(notification)
-    publish_target_product = _target_product_name_from_payload(notification)
-
     for sub in cast_hub.subscriptions[:]:  # Copy to allow removal
         if not _subscription_handles_event(sub, topic_name, event_type):
             continue
         if not _subscription_accepts_target_actor(sub, publish_target_actor):
             continue
         if not _subscription_accepts_target_product(sub, publish_target_product):
+            continue
+        if not _subscription_accepts_target_subscriber(
+            sub, publish_target_subscriber
+        ):
             continue
 
         secret = sub.get("secret", "")

@@ -42,8 +42,9 @@ import sysconfig
 import tempfile
 import time
 import traceback
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from Lib.cast_provider_runtime import (
     CastPayloadTruncatedError,
@@ -52,12 +53,16 @@ from Lib.cast_provider_runtime import (
     get_active_resource_server_products,
     publish_dicom_send_file,
     publish_nifti_send_file,
+    publish_status_update,
     record_dicom_send_received,
     record_nifti_send_received,
 )
 from Lib.cast_client import stow_files_pending_stats
 
 _LOG_PREFIX = "TotalSegmentator"
+DEFAULT_PRODUCT_NAME = "TOTALSEG"
+_job_serial = 0
+_job_status_context: Dict[str, str] = {}
 
 
 def _format_message(message: str, *args: Any) -> str:
@@ -74,21 +79,61 @@ def _on_slicer_main_thread(fn: Any) -> None:
         fn()
 
 
-def _console_log(message: str, *args: Any) -> None:
-    """Normal output in the Slicer Python console (default/white text)."""
-    text = _format_message(message, *args).rstrip()
-    if not text:
+def _start_job(topic: str, product_name: str, target_subscriber: str) -> int:
+    global _job_serial, _job_status_context
+    _job_serial += 1
+    job_number = _job_serial
+    _job_status_context = {
+        "topic": (topic or "").strip(),
+        "product_name": (product_name or DEFAULT_PRODUCT_NAME).strip()
+        or DEFAULT_PRODUCT_NAME,
+        "target_subscriber": (target_subscriber or "").strip(),
+        "job_number": str(job_number),
+    }
+    return job_number
+
+
+def _clear_job_status_context() -> None:
+    global _job_status_context
+    _job_status_context = {}
+
+
+def _job_prefix() -> str:
+    job_number = _job_status_context.get("job_number", "").strip()
+    return f"Job #{job_number}: " if job_number else ""
+
+
+def _status_clock() -> str:
+    return datetime.now().strftime("%H:%M:%S")
+
+
+def _format_status_line(text: str) -> str:
+    return f"[{_status_clock()}] {_job_prefix()}{text}"
+
+
+def _emit_status_update(line: str, level: str = "info") -> None:
+    ctx = _job_status_context
+    target = ctx.get("target_subscriber", "")
+    topic = ctx.get("topic", "")
+    if not target or not topic:
         return
-    print(f"{_LOG_PREFIX}: {text}")
+    publish_status_update(
+        ctx.get("product_name", DEFAULT_PRODUCT_NAME),
+        topic,
+        target,
+        line,
+        level,
+    )
 
 
-def _console_error(message: str, *args: Any) -> None:
-    """Errors in the Slicer Python console (red text)."""
+def _debug_log(message: str, *args: Any) -> None:
+    """Slicer console only (not sent as status-update)."""
     text = _format_message(message, *args).rstrip()
-    if not text:
-        return
-    line = f"{_LOG_PREFIX}: {text}"
+    if text:
+        print(f"{_LOG_PREFIX}: {text}")
 
+
+def _show_console_error(line: str) -> None:
     def _show_red() -> None:
         try:
             import slicer
@@ -105,13 +150,152 @@ def _console_error(message: str, *args: Any) -> None:
         print(line, file=sys.stderr)
 
 
-def _console_exception(message: str, *args: Any) -> None:
-    _console_error(message, *args)
+def _debug_error(message: str, *args: Any) -> None:
+    """Slicer console error only (not sent as status-update)."""
+    text = _format_message(message, *args).rstrip()
+    if not text:
+        return
+    _show_console_error(f"{_LOG_PREFIX}: {text}")
+
+
+def _status_log(message: str, *args: Any) -> None:
+    """User-facing progress line (VolView Job Status)."""
+    text = _format_message(message, *args).rstrip()
+    if not text:
+        return
+    line = _format_status_line(text)
+    print(f"{_LOG_PREFIX}: {line}")
+    _emit_status_update(line, "info")
+
+
+def _status_log_line(line: str, level: str = "info") -> None:
+    """User-facing line that is already formatted (e.g. subprocess stdout)."""
+    text = line.rstrip()
+    if not text:
+        return
+    full = _format_status_line(text)
+    print(f"{_LOG_PREFIX}: {full}")
+    _emit_status_update(full, level)
+
+
+def _status_error(message: str, *args: Any) -> None:
+    """User-facing error line (VolView Job Status)."""
+    text = _format_message(message, *args).rstrip()
+    if not text:
+        return
+    line = _format_status_line(text)
+    _emit_status_update(line, "error")
+    _show_console_error(f"{_LOG_PREFIX}: {line}")
+
+
+def _status_job_finished() -> None:
+    """Final job line with wall-clock finish time (VolView Job Status)."""
+    if not _job_status_context.get("job_number", "").strip():
+        return
+    finished_at = _status_clock()
+    line = _format_status_line(f"Job finished at {finished_at}")
+    print(f"{_LOG_PREFIX}: {line}")
+    _emit_status_update(line, "info")
+
+
+def _status_exception(message: str, *args: Any) -> None:
+    _status_error(message, *args)
     for exc_line in traceback.format_exc().splitlines():
-        _console_error(exc_line)
+        _status_error(exc_line)
 
 
-DEFAULT_PRODUCT_NAME = "TOTALSEG"
+def _format_byte_size(num_bytes: int) -> str:
+    if num_bytes < 1024:
+        return f"{num_bytes} B"
+    if num_bytes < 1024 * 1024:
+        return f"{num_bytes / 1024:.1f} KB"
+    if num_bytes < 1024 * 1024 * 1024:
+        return f"{num_bytes / (1024 * 1024):.1f} MB"
+    return f"{num_bytes / (1024 * 1024 * 1024):.2f} GB"
+
+
+def _entry_file_name(entry: Any, index: int) -> str:
+    if isinstance(entry, dict):
+        name = str(entry.get("fileName") or "").strip()
+        if name:
+            return name
+    return f"file-{index + 1}"
+
+
+def _entry_byte_length(entry: Any) -> Optional[int]:
+    if not isinstance(entry, dict):
+        return None
+    byte_length = entry.get("byteLength")
+    if isinstance(byte_length, int) and byte_length >= 0:
+        return byte_length
+    return None
+
+
+def _format_file_name_span(names: List[str]) -> str:
+    if not names:
+        return ""
+    if len(names) == 1:
+        return names[0]
+    return f"{names[0]} … {names[-1]}"
+
+
+def _format_download_started(files: List[Any]) -> str:
+    entries = [entry for entry in files if isinstance(entry, dict)]
+    if not entries:
+        count = len(files)
+        return (
+            f"Download started ({count} files)"
+            if count > 1
+            else "Download started"
+        )
+
+    names = [_entry_file_name(entry, index) for index, entry in enumerate(entries)]
+    lengths = [_entry_byte_length(entry) for entry in entries]
+    known_total = sum(length for length in lengths if length is not None)
+    unknown_count = sum(1 for length in lengths if length is None)
+
+    if len(entries) == 1:
+        name = names[0]
+        if lengths[0] is not None:
+            return f"Download started: {name} ({_format_byte_size(lengths[0])})"
+        return f"Download started: {name}"
+
+    size_part = ""
+    if known_total > 0:
+        size_part = f", {_format_byte_size(known_total)} total"
+    if unknown_count:
+        size_part += f" (size unknown for {unknown_count} file(s))"
+
+    return (
+        f"Download started: {len(entries)} files{size_part} "
+        f"({_format_file_name_span(names)})"
+    )
+
+
+def _format_download_complete(
+    files: List[Any], file_count: int, total_bytes: int
+) -> str:
+    entries = [entry for entry in files if isinstance(entry, dict)]
+    size_text = _format_byte_size(total_bytes)
+
+    if file_count == 1:
+        name = (
+            _entry_file_name(entries[0], 0)
+            if entries
+            else "1 file"
+        )
+        return f"Download complete: {name} ({size_text})"
+
+    name_span = _format_file_name_span(
+        [_entry_file_name(entry, index) for index, entry in enumerate(entries)]
+    )
+    if name_span:
+        return (
+            f"Download complete: {file_count} files, {size_text} ({name_span})"
+        )
+    return f"Download complete: {file_count} files, {size_text}"
+
+
 _DICOM_SEND_EVENT = "dicom-send"
 _NIFTI_SEND_EVENT = "nifti-send"
 _job_busy = False
@@ -183,38 +367,65 @@ def _redact_message_for_log(message: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def onMessage(message: Dict[str, Any], provider: Any) -> None:
-    _console_log(
+    _debug_log(
         "onMessage: received %s",
         json.dumps(_redact_message_for_log(message), default=str),
     )
     event = message.get("event") or {}
     hub_event = event.get("hub.event")
     if hub_event == _NIFTI_SEND_EVENT:
-        _on_nifti_send(message, event, provider)
+        _on_inbound_send(
+            message,
+            event,
+            provider,
+            _NIFTI_SEND_EVENT,
+            extract_all_nifti_send_files_to_dir,
+            record_nifti_send_received,
+            "NIfTI",
+        )
         return
     if hub_event != _DICOM_SEND_EVENT:
         return
-    _on_dicom_send(message, event, provider)
+    _on_inbound_send(
+        message,
+        event,
+        provider,
+        _DICOM_SEND_EVENT,
+        extract_all_dicom_send_files_to_dir,
+        record_dicom_send_received,
+        "DICOM",
+    )
 
 
-def _on_dicom_send(
-    message: Dict[str, Any], event: Dict[str, Any], provider: Any
+def _on_inbound_send(
+    message: Dict[str, Any],
+    event: Dict[str, Any],
+    provider: Any,
+    hub_event: str,
+    extract_files: Callable[..., Tuple[int, int]],
+    record_received: Callable[[str, int], None],
+    label: str,
 ) -> None:
     global _job_busy
     topic = (event.get("hub.topic") or "").strip()
     if not topic:
-        _console_error("onMessage: dicom-send missing hub.topic")
+        _debug_error("onMessage: %s missing hub.topic", hub_event)
         return
 
     product_name = getattr(provider, "product_name", "") or DEFAULT_PRODUCT_NAME
+    target_subscriber = str(message.get("subscriber.name") or "").strip()
     _job_busy = True
+    _start_job(topic, product_name, target_subscriber)
+    files: List[Any] = []
     try:
-        files = (event.get("context") or {}).get("files") or []
-        if isinstance(files, list):
+        raw_files = (event.get("context") or {}).get("files") or []
+        if isinstance(raw_files, list):
+            files = raw_files
             url_count, payload_files, chunk_count = stow_files_pending_stats(files)
-            _console_log(
-                "onMessage: dicom-send download start id=%s topic=%s files=%d "
+            _debug_log(
+                "onMessage: %s download start id=%s topic=%s files=%d "
                 "url=%d payloadFiles=%d chunks=%d product=%s",
+                hub_event,
                 message.get("id", ""),
                 topic,
                 len(files),
@@ -223,21 +434,24 @@ def _on_dicom_send(
                 chunk_count,
                 product_name,
             )
+            _status_log(_format_download_started(files))
 
         job_dir, job_input, job_output = _allocate_job_dirs(topic)
-        _console_log(
+        _debug_log(
             "onMessage: streaming download to %s id=%s topic=%s",
             job_input,
             message.get("id", ""),
             topic,
         )
         try:
-            file_count, total_bytes = extract_all_dicom_send_files_to_dir(
+            file_count, total_bytes = extract_files(
                 message, job_input, product_name
             )
         except CastPayloadTruncatedError as exc:
-            _console_error(
-                "onMessage: dicom-send download failed id=%s topic=%s: %s",
+            _status_error("Download failed: %s", exc)
+            _debug_error(
+                "onMessage: %s download failed id=%s topic=%s: %s",
+                hub_event,
                 message.get("id", ""),
                 topic,
                 exc,
@@ -245,16 +459,20 @@ def _on_dicom_send(
             shutil.rmtree(job_dir, ignore_errors=True)
             return
         if file_count < 1:
-            _console_error(
-                "onMessage: no DICOM payload id=%s topic=%s",
+            _status_error("Download failed: no %s payload received", label)
+            _debug_error(
+                "onMessage: no %s payload id=%s topic=%s",
+                label,
                 message.get("id", ""),
                 topic,
             )
             shutil.rmtree(job_dir, ignore_errors=True)
             return
-        record_dicom_send_received(topic, total_bytes)
-        _console_log(
-            "onMessage: dicom-send id=%s topic=%s files=%d bytes=%d",
+        record_received(topic, total_bytes)
+        _status_log(_format_download_complete(files, file_count, total_bytes))
+        _debug_log(
+            "onMessage: %s id=%s topic=%s files=%d bytes=%d",
+            hub_event,
             message.get("id", ""),
             topic,
             file_count,
@@ -262,81 +480,12 @@ def _on_dicom_send(
         )
 
         _run_segmentation_job_body(
-            topic, product_name, job_input, job_output, job_dir, _DICOM_SEND_EVENT
+            topic, product_name, job_input, job_output, job_dir, hub_event
         )
     finally:
         _job_busy = False
-
-
-def _on_nifti_send(
-    message: Dict[str, Any], event: Dict[str, Any], provider: Any
-) -> None:
-    global _job_busy
-    topic = (event.get("hub.topic") or "").strip()
-    if not topic:
-        _console_error("onMessage: nifti-send missing hub.topic")
-        return
-
-    product_name = getattr(provider, "product_name", "") or DEFAULT_PRODUCT_NAME
-    _job_busy = True
-    try:
-        files = (event.get("context") or {}).get("files") or []
-        if isinstance(files, list):
-            url_count, payload_files, chunk_count = stow_files_pending_stats(files)
-            _console_log(
-                "onMessage: nifti-send download start id=%s topic=%s files=%d "
-                "url=%d payloadFiles=%d chunks=%d product=%s",
-                message.get("id", ""),
-                topic,
-                len(files),
-                url_count,
-                payload_files,
-                chunk_count,
-                product_name,
-            )
-
-        job_dir, job_input, job_output = _allocate_job_dirs(topic)
-        _console_log(
-            "onMessage: streaming download to %s id=%s topic=%s",
-            job_input,
-            message.get("id", ""),
-            topic,
-        )
-        try:
-            file_count, total_bytes = extract_all_nifti_send_files_to_dir(
-                message, job_input, product_name
-            )
-        except CastPayloadTruncatedError as exc:
-            _console_error(
-                "onMessage: nifti-send download failed id=%s topic=%s: %s",
-                message.get("id", ""),
-                topic,
-                exc,
-            )
-            shutil.rmtree(job_dir, ignore_errors=True)
-            return
-        if file_count < 1:
-            _console_error(
-                "onMessage: no NIfTI payload id=%s topic=%s",
-                message.get("id", ""),
-                topic,
-            )
-            shutil.rmtree(job_dir, ignore_errors=True)
-            return
-        record_nifti_send_received(topic, total_bytes)
-        _console_log(
-            "onMessage: nifti-send id=%s topic=%s files=%d bytes=%d",
-            message.get("id", ""),
-            topic,
-            file_count,
-            total_bytes,
-        )
-
-        _run_segmentation_job_body(
-            topic, product_name, job_input, job_output, job_dir, _NIFTI_SEND_EVENT
-        )
-    finally:
-        _job_busy = False
+        _status_job_finished()
+        _clear_job_status_context()
 
 
 def _run_segmentation_job_body(
@@ -351,14 +500,16 @@ def _run_segmentation_job_body(
     try:
         staged_count = _count_input_files(job_input)
         if staged_count < 1:
-            _console_error(
+            _status_error("Segmentation failed: no input files staged")
+            _debug_error(
                 "no input files for topic=%s in %s",
                 topic,
                 job_input,
             )
             return
 
-        _console_log(
+        _status_log("Segmentation started")
+        _debug_log(
             "starting segmentation topic=%s input=%s files=%d",
             topic,
             job_input,
@@ -368,7 +519,8 @@ def _run_segmentation_job_body(
 
         output_file = _run_totalsegmentator(cli_input, job_output, hub_event)
         if not output_file:
-            _console_error(
+            _status_error("Segmentation failed: no output produced")
+            _debug_error(
                 "no output for hub.event=%s topic=%s (job dir kept: %s)",
                 hub_event,
                 topic,
@@ -376,12 +528,13 @@ def _run_segmentation_job_body(
             )
             return
 
-        _console_log(
+        _debug_log(
             "output hub.event=%s topic=%s: %s",
             hub_event,
             topic,
             output_file,
         )
+        _status_log("Publishing result…")
         if hub_event == _NIFTI_SEND_EVENT:
             published = publish_nifti_send_file(
                 product_name, topic, str(output_file)
@@ -391,14 +544,15 @@ def _run_segmentation_job_body(
                 product_name, topic, str(output_file)
             )
         if published:
-            _console_log(
+            _debug_log(
                 "published %s to topic=%s product=%s",
                 output_file,
                 topic,
                 product_name,
             )
         else:
-            _console_error(
+            _status_error("Failed to publish segmentation result")
+            _debug_error(
                 "failed to publish %s topic=%s product=%s (active: %s)",
                 output_file,
                 topic,
@@ -406,18 +560,16 @@ def _run_segmentation_job_body(
                 ", ".join(get_active_resource_server_products()) or "(none)",
             )
     except Exception as exc:
-        _console_exception("job failed topic=%s: %s", topic, exc)
+        _status_exception("Segmentation failed: %s", exc)
     finally:
         if job_dir and job_dir.is_dir():
             if output_file and output_file.is_file():
                 try:
                     shutil.rmtree(job_dir)
                 except OSError as exc:
-                    _console_error("cleanup failed: %s", exc)
+                    _debug_error("cleanup failed: %s", exc)
             else:
-                _console_log(
-                    "keeping job dir for inspection: %s", job_dir
-                )
+                _debug_log("keeping job dir for inspection: %s", job_dir)
 
 
 def _count_input_files(input_dir: Path) -> int:
@@ -437,7 +589,7 @@ def _cli_input_path(input_dir: Path, hub_event: str) -> Path:
             matches = sorted(input_dir.glob(pattern))
             if matches:
                 if len(matches) > 1:
-                    _console_log(
+                    _debug_log(
                         "multiple volume files under %s, using %s",
                         input_dir,
                         matches[0],
@@ -466,7 +618,7 @@ def _total_segmentator_launch_command() -> Optional[list[str]]:
     """PythonSlicer + TotalSegmentator CLI (same pattern as Slicer extension)."""
     python_slicer = shutil.which("PythonSlicer")
     if not python_slicer:
-        _console_error("PythonSlicer not found on PATH")
+        _status_error("Segmentation failed: PythonSlicer not found on PATH")
         return None
 
     scripts_dir = sysconfig.get_path("scripts")
@@ -474,7 +626,10 @@ def _total_segmentator_launch_command() -> Optional[list[str]]:
         scripts_dir, _ts_executable_name("TotalSegmentator")
     )
     if not os.path.isfile(ts_script):
-        _console_error(
+        _status_error(
+            "Segmentation failed: TotalSegmentator CLI not installed"
+        )
+        _debug_error(
             "CLI not found at %s (install TotalSegmentator extension)",
             ts_script,
         )
@@ -522,6 +677,7 @@ def _log_subprocess_output(proc: Any) -> None:
         ).rstrip()
         if text:
             print(text)
+            _status_log_line(text)
 
 
 def _run_totalsegmentator_subprocess(
@@ -530,7 +686,7 @@ def _run_totalsegmentator_subprocess(
     from subprocess import CalledProcessError
 
     cmd = command + options
-    _console_log("launch: %s", " ".join(cmd))
+    _debug_log("launch: %s", " ".join(cmd))
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
@@ -565,7 +721,10 @@ def _run_totalsegmentator(
             )
             _run_totalsegmentator_subprocess(command, options)
             elapsed = time.monotonic() - started
-            _console_log(
+            _status_log(
+                "Segmentation finished (%s, %.0fs)", device, elapsed
+            )
+            _debug_log(
                 "finished device=%s in %.1fs hub.event=%s output=%s",
                 device,
                 elapsed,
@@ -575,13 +734,15 @@ def _run_totalsegmentator(
             result = _find_segmentation_output(output_dir, hub_event, output_path)
             if result:
                 return result
-            _console_error(
+            _status_error("Segmentation failed: process exited without output")
+            _debug_error(
                 "exited OK but no output for hub.event=%s under %s",
                 hub_event,
                 output_dir,
             )
         except Exception as exc:
-            _console_error("failed device=%s: %s", device, exc)
+            _status_error("Segmentation failed (%s): %s", device, exc)
+            _debug_error("failed device=%s: %s", device, exc)
             if output_dir.is_dir():
                 for entry in output_dir.iterdir():
                     if entry.is_file():
@@ -613,14 +774,14 @@ def _find_output_nifti(output_dir: Path) -> Optional[Path]:
         and "input" not in path.parts
     )
     if not candidates:
-        _console_error(
+        _debug_error(
             "no NIfTI under %s (contents: %s)",
             output_dir,
             list(output_dir.rglob("*"))[:20],
         )
         return None
     if len(candidates) > 1:
-        _console_log(
+        _debug_log(
             "multiple NIfTI outputs, using %s (all: %s)",
             candidates[0],
             [str(p) for p in candidates],
@@ -638,14 +799,14 @@ def _find_output_dicom(output_dir: Path) -> Optional[Path]:
         if path.is_file() and "input" not in path.parts
     ]
     if not candidates:
-        _console_error(
+        _debug_error(
             "no .dcm under %s (contents: %s)",
             output_dir,
             list(output_dir.rglob("*"))[:20],
         )
         return None
     if len(candidates) > 1:
-        _console_log(
+        _debug_log(
             "multiple .dcm outputs, using %s (all: %s)",
             candidates[0],
             [str(p) for p in candidates],
