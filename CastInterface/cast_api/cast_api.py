@@ -522,6 +522,32 @@ def _request_context_data_type(
     return base
 
 
+IDC_CLAUDE_REQUEST_TIMEOUT_SECONDS = 180.0
+
+
+def _request_timeout_seconds(request_data: Dict) -> float:
+    """Per-request fan-out timeout; ``context.timeoutSeconds`` capped at 300s."""
+    for container in (
+        _cast_request_event_dict(request_data).get("context"),
+        request_data.get("context"),
+        request_data,
+    ):
+        if not isinstance(container, dict):
+            continue
+        raw = container.get("timeoutSeconds")
+        if raw is not None:
+            try:
+                value = float(raw)
+                if value > 0:
+                    return min(value, 300.0)
+            except (TypeError, ValueError):
+                pass
+    request_event = _request_hub_event_from_body(request_data)
+    if request_event == "idc-claude-request":
+        return max(CAST_REQUEST_TIMEOUT_SECONDS, IDC_CLAUDE_REQUEST_TIMEOUT_SECONDS)
+    return CAST_REQUEST_TIMEOUT_SECONDS
+
+
 def _summarize_websocket_message(message: Any, *, max_len: int = 200) -> str:
     """Short summary for WebSocket traffic (avoid logging full payloads)."""
     if not isinstance(message, dict):
@@ -1933,8 +1959,9 @@ async def post_cast_request(request: Request):
 
     Matches subscriptions by ``(topic, target.actor[, target.product.name])`` (``target.actor``
     ``*`` or omitted = all roles on topic). Sends the client's ``hub.event`` to each connected
-    match and waits up to ``CAST_REQUEST_TIMEOUT_SECONDS`` for the matching
-    ``<datatype>-response`` events to arrive on the bind WebSocket.
+    match and waits for the matching ``<datatype>-response`` events on the bind
+    WebSocket. Timeout defaults to ``CAST_REQUEST_TIMEOUT_SECONDS`` (2s); use
+    ``event.context.timeoutSeconds`` (max 300) or ``idc-claude-request`` (180s min).
     """
     try:
         request_data = await request.json()
@@ -2195,10 +2222,17 @@ async def post_cast_request(request: Request):
                     audit_status = "send-error"
                     audit_error = "Failed to send to all matched targets"
                 else:
+                    request_timeout_seconds = _request_timeout_seconds(request_data)
+                    cast_hub.log(
+                        "Cast request wait: "
+                        f"requester='{subscriber}', id='{request_id}', "
+                        f"event='{request_event_name}', "
+                        f"timeoutSeconds={request_timeout_seconds}"
+                    )
                     try:
                         await asyncio.wait_for(
                             completion_event.wait(),
-                            timeout=CAST_REQUEST_TIMEOUT_SECONDS,
+                            timeout=request_timeout_seconds,
                         )
                     except asyncio.TimeoutError:
                         timed_out = True
@@ -2212,7 +2246,7 @@ async def post_cast_request(request: Request):
                     if timed_out:
                         audit_status = "timeout"
                         audit_error = (
-                            f"Timeout after {CAST_REQUEST_TIMEOUT_SECONDS}s waiting for responses"
+                            f"Timeout after {request_timeout_seconds}s waiting for responses"
                         )
                         cast_hub.log(
                             "Cast request timeout: "
