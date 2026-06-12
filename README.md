@@ -27,8 +27,10 @@ Cast is an offshoot of FHIRcast (<https://fhircast.hl7.org/>). FHIRcast is the s
 
 
 
-You can get a feeling of websocket subscription integration with the vtk-js IO module cast interface example. Make sure to open a few viewers with different layouts and try the "Open scene views" button to try out cross-product multi-host display layouts:
+You can get a feeling of websocket subscription integration with the vtk-js IO module cast interface example. Open several viewers instances  and try the "Open scene views" button for cross-product multi-host display layouts in the worklist client example:
 [Open  worklist demo](https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/worklist-client/examples/CastClient/index.html)
+
+
 [![Cast worklist client](CastInterface/docs/images/worklist-client.png)](https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/worklist-client/examples/CastClient.html)
 
 
@@ -53,7 +55,7 @@ It can be used without the slicer extension by running the "cast_api.py" script.
 #### Resource servers:
 
 
-Resource servers provide desktop integration of image processing services. This allow users to view AI results without having to send them to the archive first.
+Resource servers are agents that provide backend services to cast participant. This allow users to , for example, view AI results without having to send them to the archive first.
 
 The resource server tab provides a visual description of how processing resources can be connected to the hub and made available to cast workflows.
 Here for example, in the VolView client:
@@ -61,9 +63,9 @@ Here for example, in the VolView client:
 
 
 Resource servers subscribe to all user topics for status-request and dicom/nifti events. They send binary results back to the user through the hub.
+In the default example, Total Segmentator and  IDC Claude skill is used to provide the added functionality to the desktop integration. 
 
-
-Since these resources do not log in as a user, they need a resource server entry in the authorization server. This provides a client id and client secret.
+Since these resources do not log in as a user, they need a *resource server entry* in the authorization server. This provides a client id and client secret.
 For the cast extension hub, these must be configured in the environment variables of the hub for the resource to connect successfully.
 
 
@@ -88,21 +90,21 @@ The image display client provides a PACS client type interface to the 3D Slicer 
 ### Simplified, secure deployment of medical imaging services
 
 
-This architecture protects resource servers by eliminating direct inbound internet exposure entirely. No hostname is required and no changes to the networking environment are needed.
+This architecture protects resource servers by eliminating direct inbound internet exposure entirely. No hostname is required and no changes to the networking environment are needed.  No VPN or proxy to configure.
 
 
-Each resource server establishes only outbound encrypted connections to the Cast Hub, which functions exclusively as a routing appliance. Because no inbound ports need to be opened on hospital or enterprise networks, the resource servers remain protected behind existing firewalls and are never directly reachable from the public internet.
+Each resource server establishes only outbound encrypted connections to the hub, which functions exclusively as a routing appliance. Because no inbound ports need to be opened on hospital or enterprise networks, the resource servers remain protected behind existing firewalls and are never directly reachable from the public internet.
 
-It also simplifies providing resources in-house since the IT department only needs to add a hostname and rules for the hub. They do not have to touch their networking every time a new resource server is available for use. They only have to configure a shared key for it in their auth server.
+It also simplifies providing resources in-house since the IT department only needs to add a hostname and rules for the hub. They do not have to touch their networking every time a new resource server is available for use. They only have to configure a shared resource server key for it in their authorization server.
 
 
-For the hub, it provides a significantly reduced attack surface and minimizes operational security risk since it maintains no storage or database.
+For the hub, the architecture provides a significantly reduced attack surface and minimizes operational security risk since it maintains no storage or database.
 <p align="center">
   <img src="CastInterface/docs/images/deployment.png" alt="Cast Interface Banner" width="100%">
 </p>
 
 
-After installation, the resource servers outbound ports can also be locked down, allowing access to the hub and sites needed by the extension only.
+After installation, the resource servers outbound ports can also be locked down, allowing access to the hub and sites needed by the resource only.
 
 In theory, the hub can be cloud deployed as a serverless application. In practice, many of those low-cost offerings do not support websocket services and a docker based offering is necessary like Azure WebApps or AWS Elastic Beanstalk.
 
@@ -110,10 +112,8 @@ For high availability deployment a hot standby configuration can be used. The "r
 
 The hub provides a test mock auth endpoint that assigns a user when none is provided. For public web applications that do not need user authentication but want to use the resource servers, the mock endpoints provide the required functionality.
 
-The hub also supports a “single-user” mode for stand-alone applications.
 
-Since the resource servers are not on the internet, you will get shared keys for the auth server.
-The hub can use domain name certificates.
+Since the resource servers are not on the internet, you will get shared keys for the auth server.  The hub can use domain name certificates.
 
 
 ## Installation
@@ -136,9 +136,19 @@ MIT License
 
 ## Acknowledgements
 
-* 3D Slicer community
-* Open-source healthcare ecosystem
-* Medical imaging interoperability initiatives
+
+**TotalSegmentator** was created by the Department of Research and Analysis at University Hospital Basel. If you use it, please cite our Radiology: Artificial Intelligence paper ([free preprint](https://arxiv.org/abs/2208.05868)). If you use it for MR images, please cite the TotalSegmentator MRI *Radiology* paper ([free preprint](https://arxiv.org/abs/2405.19492)).
+
+**nnU-Net** — TotalSegmentator is heavily based on nnU-Net ([preprint](https://arxiv.org/abs/1809.10486)).
+
+**IDC Claude** — builds custom worklists from natural-language queries against the [Imaging Data Commons](https://portal.imaging.datacommons.cancer.gov/) (National Cancer Institute) using Anthropic Claude and the local *idc-index* client. Query guidance follows the [IDC skill](https://github.com/ImagingDataCommons/imaging-data-commons-skill). If you use this workflow in research, cite Fedorov A, et al., *Radiographics* ([2023](https://doi.org/10.1148/rg.230180)).
+
+
+**VolView** — open-source web viewer from [Kitware, Inc.](https://github.com/Kitware/VolView) Cast connects to VolView as an Image Display client for study open, scene views, and DICOM exchange.
+
+**OHIF** — open-source zero-footprint viewer from the [Open Health Imaging Foundation](https://ohif.org/). Cast connects to OHIF as an Image Display client with the same hub workflows.
+
+**3D Slicer** — open-source platform for medical image computing from the [3D Slicer community](https://www.slicer.org/). The Cast Interface extension provides Slicer Image Display and hub integration used by this worklist.
 
 ---
 
