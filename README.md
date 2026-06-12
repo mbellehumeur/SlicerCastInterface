@@ -34,7 +34,7 @@ You can get a feeling of websocket subscription integration with the vtk-js IO m
 [![Cast worklist client](CastInterface/docs/images/worklist-client.png)](https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/worklist-client/examples/CastClient.html)
 
 
-Cast has a context/content sharing strategy and hub architecture that differ somewhat to FHIRcast, see description [here](CastInterface/docs/cast-description.md).
+Cast has a context/content sharing strategy and hub architecture that differs somewhat to FHIRcast, see description [here](CastInterface/docs/cast-description.md).
 
 
 
@@ -141,7 +141,9 @@ MIT License
 
 **nnU-Net** — TotalSegmentator is heavily based on nnU-Net ([preprint](https://arxiv.org/abs/1809.10486)).
 
-**IDC Claude** — builds custom worklists from natural-language queries against the [Imaging Data Commons](https://portal.imaging.datacommons.cancer.gov/) (National Cancer Institute) using Anthropic Claude and the local *idc-index* client. Query guidance follows the [IDC skill](https://github.com/ImagingDataCommons/imaging-data-commons-skill). If you use this workflow in research, cite Fedorov A, et al., *Radiographics* ([2023](https://doi.org/10.1148/rg.230180)).
+**IDC Claude** — builds custom worklists from natural-language queries against the [Imaging Data Commons](https://portal.imaging.datacommons.cancer.gov/) (National Cancer Institute) using Anthropic Claude. Query guidance follows the [IDC skill](https://github.com/ImagingDataCommons/imaging-data-commons-skill).
+
+**idc-index** — official [Imaging Data Commons](https://github.com/ImagingDataCommons/idc-index) Python package for local DuckDB SQL against IDC metadata and DICOM series download URLs; used by the IDC Claude resource server. If you use it in research, cite Fedorov A, et al., *Radiographics* ([2023](https://doi.org/10.1148/rg.230180)).
 
 
 **VolView** — open-source web viewer from [Kitware, Inc.](https://github.com/Kitware/VolView) Cast connects to VolView as an Image Display client for study open, scene views, and DICOM exchange.
@@ -152,9 +154,9 @@ MIT License
 
 ---
 
-## Disclaimers
+## Standards and trademarks
 
-**Standards and trademarks**
+
 
 DICOM® is the registered trademark of the National Electrical Manufacturers Association (NEMA) for its standards publications relating to digital imaging and communications in medicine. FHIR® and related HL7 marks are registered trademarks of Health Level Seven International (HL7). IHE® is a registered trademark of HIMSS. VolView® is a trademark of Kitware, Inc. OHIF® is a trademark of the Open Health Imaging Foundation. Imaging Data Commons® is a trademark of the National Cancer Institute.
 

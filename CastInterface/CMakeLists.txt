@@ -1,5 +1,11 @@
 #-----------------------------------------------------------------------------
 set(MODULE_NAME CastInterface)
+set(EXTENSION_HOMEPAGE "https://github.com/mbellehumeur/SlicerCastInterface/")
+set(EXTENSION_CATEGORY "Ultrasound")
+set(EXTENSION_CONTRIBUTORS "Martin Bellehumeur")
+set(EXTENSION_DESCRIPTION "Desktop Integration for Healthcare Providers and Researchers.")
+set(EXTENSION_ICONURL "https://raw.githubusercontent.com/SlicerCastInterface/main/CastInterface/docs/images/CastInterfaceExtensionLogo.png")
+set(EXTENSION_SCREENSHOTURLS "https://raw.githubusercontent.com/SlicerCastInterface/main/CastInterface/docs/images/hub-admin.png")
 
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS

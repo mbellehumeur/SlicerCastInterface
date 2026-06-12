@@ -7,7 +7,7 @@ project(CastInterface)
 set(EXTENSION_HOMEPAGE "https://github.com/mbellehumeur/SlicerCastInterface")
 set(EXTENSION_CONTRIBUTORS "Martin Bellehumeur (Radical Imaging)")
 set(EXTENSION_DESCRIPTION "Desktop Integration for Healthcare Providers and Researchers.")
-set(EXTENSION_ICONURL "https://github.com/mbellehumeur/SlicerCastInterface/blob/main/docs/images/CastInterfaceExtensionLogo.png")
+set(EXTENSION_ICONURL "https://raw.githubusercontent.com/mbellehumeur/SlicerCastInterface/main/CastInterface/docs/images/CastInterfaceExtensionLogo.png")
 set(EXTENSION_SCREENSHOTURLS "https://www.example.com/Slicer/Extensions/CastInterface/Screenshots/1.png")
 set(EXTENSION_DEPENDS "NA") # Specified as a list or "NA" if no dependencies
 
