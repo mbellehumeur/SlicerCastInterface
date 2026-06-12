@@ -3,218 +3,513 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VolView Cast Conference</title>
-    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <title>Cast Conference</title>
+    <link rel="icon" id="app-favicon" type="image/png" href="/static/images/3DSlicer-DesktopIcon.png">
     <style>
+        :root {
+            --bg-page: #f5f5f5;
+            --bg-surface: #ffffff;
+            --bg-muted: #f5f5f5;
+            --bg-input: #ffffff;
+            --bg-btn: #f5f5f5;
+            --bg-btn-hover: #e8e8e8;
+            --bg-btn-disabled: #fafafa;
+            --bg-btn-primary: #0068c7;
+            --bg-btn-primary-hover: #005bb5;
+            --text-primary: #212121;
+            --text-secondary: #757575;
+            --text-muted: #9e9e9e;
+            --text-disabled: #bdbdbd;
+            --text-on-primary: #ffffff;
+            --border: #e0e0e0;
+            --border-btn: #c8c8c8;
+            --accent: #0068c7;
+            --accent-hover: #005bb5;
+            --shadow-surface: 0 2px 8px rgba(0, 0, 0, 0.1);
+            --success-bg: #e8f5e9;
+            --success-color: #2e7d32;
+            --success-border: #4caf50;
+            --error-bg: #fff3e0;
+            --error-color: #e65100;
+            --error-border: #ff9800;
+            --info-border: #0068c7;
+        }
+        html[data-mode='light'] {
+            --bg-page: #e8e8e8;
+            --bg-surface: #ffffff;
+            --bg-muted: #f0f0f0;
+            --bg-input: #ffffff;
+            --bg-btn: #eeeeee;
+            --bg-btn-hover: #e0e0e0;
+            --bg-btn-disabled: #f5f5f5;
+            --bg-btn-primary: #0068c7;
+            --bg-btn-primary-hover: #005bb5;
+            --text-primary: #212121;
+            --text-secondary: #555555;
+            --text-muted: #757575;
+            --border: #cccccc;
+            --accent: #0068c7;
+        }
+        html[data-theme='volview'][data-mode='light'] {
+            --bg-btn-primary: #3eae2b;
+            --bg-btn-primary-hover: #358f24;
+            --accent: #3eae2b;
+            --accent-hover: #358f24;
+            --info-border: #3eae2b;
+        }
+        html[data-mode='dark'],
+        html:not([data-mode]) {
+            --bg-page: #1a1a22;
+            --bg-surface: #242c40;
+            --bg-muted: #1e2434;
+            --bg-input: #56678d;
+            --bg-btn: #3a4560;
+            --bg-btn-hover: #4a5670;
+            --bg-btn-disabled: #2e3448;
+            --bg-btn-primary: #4a7c59;
+            --bg-btn-primary-hover: #5a9a6a;
+            --text-primary: #e8e8f4;
+            --text-secondary: #b0b8c8;
+            --text-muted: #8890a8;
+            --text-disabled: #6a7288;
+            --text-on-primary: #ffffff;
+            --border: #3a4560;
+            --border-btn: #4a5670;
+            --accent: #6eb5ff;
+            --accent-hover: #8fc4ff;
+            --shadow-surface: 0 2px 12px rgba(0, 0, 0, 0.35);
+            --success-bg: #1b3d24;
+            --success-color: #a5d6a7;
+            --success-border: #4caf50;
+            --error-bg: #4a3520;
+            --error-color: #ffb74d;
+            --error-border: #ff9800;
+            --info-border: #6eb5ff;
+        }
+        html[data-theme='volview'][data-mode='dark'],
+        html[data-theme='volview']:not([data-mode]) {
+            --bg-btn-primary: #4a7c59;
+            --bg-btn-primary-hover: #5a9a6a;
+            --accent: #6eb5ff;
+            --info-border: #6eb5ff;
+        }
+        * {
+            box-sizing: border-box;
+        }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-            color: #212121;
+            padding: 8px;
+            background-color: var(--bg-page);
+            color: var(--text-primary);
+            line-height: 1.4;
+            font-size: 13px;
         }
-        .container {
-            max-width: 900px;
+        .page {
+            max-width: 640px;
             margin: 0 auto;
-            background: #ffffff;
-            padding: 30px;
+        }
+        .surface {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
             border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            box-shadow: var(--shadow-surface);
+            padding: 12px 14px;
         }
-        h1, h2 {
-            color: #212121;
-            margin-top: 0;
+        .page-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 10px;
         }
-        h1 {
-            color: #0068C7;
-            font-weight: 400;
-            line-height: 1;
+        .page-header-brand h1 {
+            margin: 0;
+            font-size: 1.15rem;
+            font-weight: 500;
+            color: var(--accent);
+        }
+        .page-header-brand .subtitle {
+            margin: 2px 0 0;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        .theme-toggle {
+            display: inline-flex;
+            border: 1px solid var(--border-btn);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .theme-toggle button {
+            margin: 0;
+            padding: 6px 12px;
+            border: none;
+            border-radius: 0;
+            background: var(--bg-btn);
+            color: var(--text-secondary);
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .theme-toggle button:hover {
+            background: var(--bg-btn-hover);
+            color: var(--text-primary);
+        }
+        .theme-toggle button.active {
+            background: var(--bg-btn-primary);
+            color: var(--text-on-primary);
+        }
+        .context-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 12px;
+            padding: 8px 10px;
+            margin-bottom: 10px;
+            background: var(--bg-muted);
+            border-radius: 8px;
+            border-left: 4px solid var(--info-border);
+            font-size: 13px;
+        }
+        .context-bar strong {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+        .context-bar .muted {
+            color: var(--text-muted);
+        }
+        .context-bar.warn {
+            border-left-color: var(--error-border);
+            background: var(--error-bg);
+            color: var(--error-color);
+        }
+        #statusMessage {
+            margin-bottom: 10px;
+        }
+        #statusMessage:empty {
+            display: none;
+        }
+        .status {
+            padding: 12px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+        .status.success {
+            border-left: 3px solid var(--success-border);
+            background-color: var(--success-bg);
+            color: var(--success-color);
+        }
+        .status.error {
+            border-left: 3px solid var(--error-border);
+            background-color: var(--error-bg);
+            color: var(--error-color);
+        }
+        .grid-two {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .card {
+            background: var(--bg-muted);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px 12px;
+        }
+        .card h2 {
+            margin: 0 0 10px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-primary);
         }
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 10px;
+        }
+        .form-group:last-child {
+            margin-bottom: 0;
         }
         label {
             display: block;
-            margin-bottom: 8px;
-            color: #757575;
-            font-size: 14px;
+            margin-bottom: 6px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 500;
         }
         input, textarea, select {
             width: 100%;
-            padding: 10px;
-            border: 1px solid #c8c8c8;
-            border-radius: 4px;
-            background-color: #ffffff;
-            color: #212121;
+            padding: 7px 9px;
+            border: 1px solid var(--border-btn);
+            border-radius: 6px;
+            background-color: var(--bg-input);
+            color: var(--text-primary);
             font-size: 14px;
-            box-sizing: border-box;
         }
         input:focus, textarea:focus, select:focus {
-            outline: none;
-            border-color: #0068C7;
+            outline: 2px solid var(--accent);
+            outline-offset: 1px;
+            border-color: var(--accent);
         }
-        input:disabled {
-            background-color: #fafafa;
-            color: #bdbdbd;
+        input:disabled, select:disabled {
+            background-color: var(--bg-btn-disabled);
+            color: var(--text-disabled);
             cursor: not-allowed;
+        }
+        .btn-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            margin-top: 4px;
         }
         button {
-            padding: 8px 16px;
-            border: 1px solid #c8c8c8;
-            border-radius: 4px;
-            background-color: #f5f5f5;
-            color: #212121;
+            padding: 6px 12px;
+            border: 1px solid var(--border-btn);
+            border-radius: 6px;
+            background-color: var(--bg-btn);
+            color: var(--text-primary);
             cursor: pointer;
             font-size: 14px;
-            margin-right: 10px;
-            margin-bottom: 10px;
-            transition: background-color 0.2s, border-color 0.2s;
+            margin: 0;
+            transition: background-color 0.15s, border-color 0.15s;
         }
         button:hover:not(:disabled) {
-            background-color: #e8e8e8;
-            border-color: #bdbdbd;
+            background-color: var(--bg-btn-hover);
         }
         button:disabled {
-            background-color: #fafafa;
-            color: #bdbdbd;
+            background-color: var(--bg-btn-disabled);
+            color: var(--text-disabled);
             cursor: not-allowed;
-            border-color: #e0e0e0;
         }
         button.primary {
-            background-color: #0068C7;
-            color: white;
-            border: 1px solid #005bb5;
+            background-color: var(--bg-btn-primary);
+            color: var(--text-on-primary);
+            border-color: var(--bg-btn-primary-hover);
         }
         button.primary:hover:not(:disabled) {
-            background-color: #005bb5;
-            border-color: #0068C7;
-        }
-        .status {
-            padding: 12px;
-            border-radius: 4px;
-            margin: 20px 0;
-        }
-        .status.success {
-            border-left: 3px solid #4CAF50;
-            background-color: #e8f5e9;
-            color: #2e7d32;
-        }
-        .status.error {
-            border-left: 3px solid #ff9800;
-            background-color: #fff3e0;
-            color: #e65100;
+            background-color: var(--bg-btn-primary-hover);
         }
         .info-box {
-            background-color: #f5f5f5;
-            padding: 15px;
-            border-radius: 4px;
-            margin-bottom: 20px;
-            border-left: 4px solid #0068C7;
+            background-color: var(--bg-surface);
+            padding: 8px 10px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border);
+            font-size: 13px;
         }
-        .info-box strong {
-            color: #212121;
+        .info-box p {
+            margin: 0 0 8px;
+        }
+        .info-box p:last-child {
+            margin-bottom: 0;
         }
         .topics-panel {
-            max-height: 200px;
+            max-height: 140px;
             overflow-y: auto;
-            border: 1px solid #c8c8c8;
-            border-radius: 4px;
-            padding: 10px;
-            background-color: #ffffff;
+            border: 1px solid var(--border-btn);
+            border-radius: 6px;
+            padding: 8px 10px;
+            background-color: var(--bg-input);
         }
         .topics-panel .muted {
-            color: #9e9e9e;
+            color: var(--text-muted);
             font-style: italic;
+            margin: 0;
         }
         .topic-checkbox {
-            margin: 8px 0;
+            margin: 6px 0;
             display: flex;
             align-items: center;
+            gap: 10px;
         }
         .topic-checkbox input[type="checkbox"] {
             width: auto;
-            margin-right: 10px;
+            margin: 0;
             cursor: pointer;
+            flex-shrink: 0;
         }
         .topic-checkbox label {
             margin: 0;
             cursor: pointer;
-            color: #212121;
+            color: var(--text-primary);
             font-weight: normal;
+        }
+        .section-card {
+            margin-bottom: 0;
+        }
+        .section-card h2 {
+            margin: 0 0 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+        }
+        .table-wrap {
+            overflow-x: auto;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--bg-muted);
         }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 10px;
+            min-width: 420px;
         }
         th, td {
-            padding: 12px;
+            padding: 7px 10px;
             text-align: left;
-            border-bottom: 1px solid #e0e0e0;
-            color: #212121;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-primary);
         }
         th {
-            background-color: #f5f5f5;
+            background-color: var(--bg-surface);
             font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: var(--text-secondary);
         }
-        tr:hover {
-            background-color: #f5f5f5;
+        tr:last-child td {
+            border-bottom: none;
+        }
+        tbody tr:hover {
+            background-color: var(--bg-btn-hover);
         }
         .topic {
             font-weight: 500;
-            color: #0068C7;
+            color: var(--accent);
+        }
+        .empty-state {
+            margin: 0;
+            padding: 10px;
+            color: var(--text-muted);
+            font-style: italic;
+            text-align: center;
         }
     </style>
+    <script>
+        (function () {
+            const p = new URLSearchParams(location.search);
+            const t = (p.get('theme') || '3dslicer').toLowerCase();
+            const theme =
+                t === '3dslicer' || t === 'slicer' ? '3dslicer' : 'volview';
+            document.documentElement.dataset.theme = theme;
+            const MODE_KEY = 'castConferenceColorMode';
+            const saved = localStorage.getItem(MODE_KEY);
+            let mode = 'dark';
+            if (saved === 'light' || saved === 'dark') {
+                mode = saved;
+            } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+                mode = 'light';
+            }
+            document.documentElement.dataset.mode = mode;
+            const isSlicer = theme === '3dslicer';
+            document.title = isSlicer ? '3D Slicer Cast Conference' : 'Cast Conference';
+            const favicon = document.getElementById('app-favicon');
+            if (favicon) {
+                if (isSlicer) {
+                    favicon.href = '/static/images/3DSlicer-DesktopIcon.png';
+                    favicon.type = 'image/png';
+                } else {
+                    favicon.href = '/static/images/volview-logo.svg';
+                    favicon.type = 'image/svg+xml';
+                }
+            }
+            window.applyConferenceColorMode = function (nextMode) {
+                const m = nextMode === 'light' ? 'light' : 'dark';
+                document.documentElement.dataset.mode = m;
+                localStorage.setItem(MODE_KEY, m);
+                const lightBtn = document.getElementById('themeLightBtn');
+                const darkBtn = document.getElementById('themeDarkBtn');
+                if (lightBtn) {
+                    lightBtn.classList.toggle('active', m === 'light');
+                }
+                if (darkBtn) {
+                    darkBtn.classList.toggle('active', m === 'dark');
+                }
+            };
+            document.addEventListener('DOMContentLoaded', function () {
+                window.applyConferenceColorMode(mode);
+            });
+        })();
+    </script>
 </head>
 <body>
-    <div class="container">
-        <h1>Cast Conference</h1>
+    <div class="page">
+        <div class="surface">
+            <header class="page-header">
+                <div class="page-header-brand">
+                    <h1>Cast Conference</h1>
+                    <p class="subtitle">Multi-participant Cast hub sessions</p>
+                </div>
+                <div class="header-actions">
+                    <div class="theme-toggle" role="group" aria-label="Color mode">
+                        <button type="button" id="themeLightBtn" onclick="applyConferenceColorMode('light')">Light</button>
+                        <button type="button" id="themeDarkBtn" onclick="applyConferenceColorMode('dark')">Dark</button>
+                    </div>
+                </div>
+            </header>
 
-        <div id="statusMessage"></div>
+            <div id="contextBar" class="context-bar" hidden></div>
 
-        <div id="createConferenceSection">
-            <h2>Create Conference</h2>
-            <form id="conferenceForm" onsubmit="createConference(event)">
-            <div class="form-group">
-                <label for="title">Conference Title:</label>
-                <select id="title" required onchange="handleTitleChange()">
-                    <option value="">Select a conference title</option>
-                    <option value="Test conference" selected>Test conference</option>
-                    <option value="Tumor Board">Tumor Board</option>
-                    <option value="Case review">Case discussion</option>
-                    <option value="Pedicle screw">Pedicle screw</option>
-                    <option value="other">Other</option>
-                </select>
-            </div>
-            <div class="form-group" id="otherTitleGroup" style="display: none;">
-                <label for="otherTitle">Other Title:</label>
-                <input type="text" id="otherTitle" placeholder="Enter custom conference title">
-            </div>
-            <div class="form-group">
-                <label>Select Topics:</label>
-                <div id="topicsList" class="topics-panel">
-                    <p class="muted">Loading topics...</p>
+            <div id="statusMessage"></div>
+
+            <div class="grid-two">
+                <div id="createConferenceSection" class="card">
+                    <h2>Create conference</h2>
+                    <form id="conferenceForm" onsubmit="createConference(event)">
+                        <div class="form-group">
+                            <label for="title">Conference title</label>
+                            <select id="title" required onchange="handleTitleChange()">
+                                <option value="">Select a conference title</option>
+                                <option value="Test conference" selected>Test conference</option>
+                                <option value="Tumor Board">Tumor Board</option>
+                                <option value="Case discussion">Case discussion</option>
+                                <option value="Pedicle screw">Pedicle screw</option>
+                                <option value="other">Other…</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="otherTitleGroup" style="display: none;">
+                            <label for="otherTitle">Custom title</label>
+                            <input type="text" id="otherTitle" placeholder="Enter conference title">
+                        </div>
+                        <div class="form-group">
+                            <label>Topics</label>
+                            <div id="topicsList" class="topics-panel">
+                                <p class="muted">Loading topics…</p>
+                            </div>
+                        </div>
+                        <div class="btn-row">
+                            <button type="submit" id="createButton" class="primary">Create conference</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div id="manageConferenceSection" class="card" style="display: none;">
+                    <h2>Manage conference</h2>
+                    <div id="conferenceInfo" class="info-box">
+                        <p><strong>Title:</strong> <span id="conferenceTitleDisplay">—</span></p>
+                        <p><strong>Host:</strong> <span id="conferenceUserDisplay">—</span></p>
+                        <p><strong>Topics:</strong> <span id="conferenceTopicsDisplay">—</span></p>
+                    </div>
+                    <div class="btn-row">
+                        <button type="button" id="exitConferenceButton" class="primary" onclick="exitConference()">Exit conference</button>
+                    </div>
                 </div>
             </div>
-            <button type="submit" id="createButton" class="primary">Create Conference</button>
-            </form>
-        </div>
 
-        <div id="manageConferenceSection" style="display: none;">
-            <h2>Manage Conference</h2>
-            <div id="conferenceInfo" class="info-box">
-                <p><strong>Conference Title:</strong> <span id="conferenceTitleDisplay">-</span></p>
-                <p><strong>User:</strong> <span id="conferenceUserDisplay">-</span></p>
-                <p><strong>Topics:</strong> <span id="conferenceTopicsDisplay">-</span></p>
-            </div>
-            <button id="exitConferenceButton" class="primary" onclick="exitConference()">Exit Conference</button>
+            <section class="section-card">
+                <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px;">
+                    <h2 style="margin: 0;">Active conferences</h2>
+                    <button type="button" class="primary" onclick="loadConferences()">Refresh</button>
+                </div>
+                <div id="conferencesList">
+                    <p class="empty-state">Loading conferences…</p>
+                </div>
+            </section>
         </div>
-
-        <h2>Active Conferences</h2>
-        <div id="conferencesList">
-            <p class="muted">Loading conferences...</p>
-        </div>
-        <button class="primary" onclick="loadConferences()">Refresh</button>
     </div>
 
     <script>
@@ -230,6 +525,32 @@
             const urlParams = new URLSearchParams(window.location.search);
             subscriberName = urlParams.get('subscriberName') || urlParams.get('user');
             topicName = urlParams.get('topic');
+            renderContextBar();
+        }
+
+        function renderContextBar() {
+            const bar = document.getElementById('contextBar');
+            if (!bar) {
+                return;
+            }
+            if (!subscriberName) {
+                bar.className = 'context-bar warn';
+                bar.hidden = false;
+                bar.innerHTML =
+                    '<span><strong>Subscriber not set.</strong> Open this page from a Cast client ' +
+                    '(<em>Conferencing</em> menu) or add <code>?subscriberName=…&amp;topic=…</code> to the URL.</span>';
+                return;
+            }
+            bar.className = 'context-bar';
+            bar.hidden = false;
+            const topicPart = topicName
+                ? '<span><strong>Topic:</strong> ' + escapeHtml(topicName) + '</span>'
+                : '<span class="muted">No topic in URL</span>';
+            bar.innerHTML =
+                '<span><strong>Subscriber:</strong> ' +
+                escapeHtml(subscriberName) +
+                '</span>' +
+                topicPart;
         }
 
         async function loadTopics() {
@@ -238,7 +559,7 @@
             try {
                 const response = await fetch(CONFERENCE_TOPICS_API);
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    throw new Error('HTTP error! status: ' + response.status);
                 }
                 const topics = await response.json();
                 allTopics = (topics || []).filter(
@@ -247,14 +568,28 @@
 
                 if (allTopics.length > 0) {
                     let html = '';
-                    allTopics.forEach(topic => {
-                        const isChecked = topicName && (topic === topicName || topic.toLowerCase() === topicName.toLowerCase()) ? 'checked' : '';
-                        html += `
-                            <div class="topic-checkbox">
-                                <input type="checkbox" id="topic-${escapeHtml(topic)}" name="topics" value="${escapeHtml(topic)}" ${isChecked}>
-                                <label for="topic-${escapeHtml(topic)}">${escapeHtml(topic)}</label>
-                            </div>
-                        `;
+                    allTopics.forEach((topic) => {
+                        const isChecked =
+                            topicName &&
+                            (topic === topicName ||
+                                topic.toLowerCase() === topicName.toLowerCase())
+                                ? ' checked'
+                                : '';
+                        const safeId = 'topic-' + topic.replace(/[^a-zA-Z0-9_-]/g, '_');
+                        html +=
+                            '<div class="topic-checkbox">' +
+                            '<input type="checkbox" id="' +
+                            escapeHtml(safeId) +
+                            '" name="topics" value="' +
+                            escapeHtml(topic) +
+                            '"' +
+                            isChecked +
+                            '>' +
+                            '<label for="' +
+                            escapeHtml(safeId) +
+                            '">' +
+                            escapeHtml(topic) +
+                            '</label></div>';
                     });
                     topicsDiv.innerHTML = html;
                 } else {
@@ -262,13 +597,16 @@
                 }
             } catch (error) {
                 console.error('Error loading topics:', error);
-                topicsDiv.innerHTML = `<p class="status error">Error loading topics: ${escapeHtml(error.message)}</p>`;
+                topicsDiv.innerHTML =
+                    '<p class="muted">Error loading topics: ' +
+                    escapeHtml(error.message) +
+                    '</p>';
             }
         }
 
         function getSelectedTopics() {
             const checkboxes = document.querySelectorAll('input[name="topics"]:checked');
-            return Array.from(checkboxes).map(cb => cb.value);
+            return Array.from(checkboxes).map((cb) => cb.value);
         }
 
         function handleTitleChange() {
@@ -291,19 +629,22 @@
             let title = titleSelect.value.trim();
 
             if (!subscriberName) {
-                statusDiv.innerHTML = '<div class="status error">Subscriber must be provided in URL parameters (e.g., ?subscriber=user1)</div>';
+                statusDiv.innerHTML =
+                    '<div class="status error">Subscriber must be provided in URL parameters (e.g. ?subscriberName=user1)</div>';
                 return;
             }
 
-            if (!title || title === '') {
-                statusDiv.innerHTML = '<div class="status error">Conference title is required</div>';
+            if (!title) {
+                statusDiv.innerHTML =
+                    '<div class="status error">Conference title is required</div>';
                 return;
             }
 
             if (title === 'other') {
                 const otherTitle = document.getElementById('otherTitle').value.trim();
                 if (!otherTitle) {
-                    statusDiv.innerHTML = '<div class="status error">Please enter a custom conference title</div>';
+                    statusDiv.innerHTML =
+                        '<div class="status error">Please enter a custom conference title</div>';
                     return;
                 }
                 title = otherTitle;
@@ -311,29 +652,31 @@
 
             const selectedTopics = getSelectedTopics();
             if (selectedTopics.length === 0) {
-                statusDiv.innerHTML = '<div class="status error">Please select at least one topic</div>';
+                statusDiv.innerHTML =
+                    '<div class="status error">Please select at least one topic</div>';
                 return;
             }
 
             createButton.disabled = true;
-            createButton.textContent = 'Creating...';
+            createButton.textContent = 'Creating…';
             statusDiv.innerHTML = '';
 
             try {
                 const response = await fetch(CONFERENCE_API, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
                         user: subscriberName,
                         title: title,
-                        topics: selectedTopics
-                    })
+                        topics: selectedTopics,
+                    }),
                 });
 
                 if (response.ok) {
-                    statusDiv.innerHTML = '<div class="status success">Conference created successfully!</div>';
+                    statusDiv.innerHTML =
+                        '<div class="status success">Conference created successfully.</div>';
                     titleSelect.value = '';
                     document.getElementById('otherTitle').value = '';
                     document.getElementById('otherTitleGroup').style.display = 'none';
@@ -343,14 +686,17 @@
                     }, 3000);
                 } else {
                     const errorText = await response.text();
-                    throw new Error(`Failed to create conference: ${response.status} - ${errorText}`);
+                    throw new Error(
+                        'Failed to create conference: ' + response.status + ' - ' + errorText
+                    );
                 }
             } catch (error) {
                 console.error('Error creating conference:', error);
-                statusDiv.innerHTML = `<div class="status error">Error: ${escapeHtml(error.message)}</div>`;
+                statusDiv.innerHTML =
+                    '<div class="status error">Error: ' + escapeHtml(error.message) + '</div>';
             } finally {
                 createButton.disabled = false;
-                createButton.textContent = 'Create Conference';
+                createButton.textContent = 'Create conference';
             }
         }
 
@@ -361,7 +707,12 @@
 
             for (const conf of conferences) {
                 const topics = Array.isArray(conf.topics) ? conf.topics : [conf.topics];
-                if (topics.some(t => t === topicName || t.toLowerCase() === topicName.toLowerCase())) {
+                if (
+                    topics.some(
+                        (t) =>
+                            t === topicName || t.toLowerCase() === topicName.toLowerCase()
+                    )
+                ) {
                     return conf;
                 }
             }
@@ -377,10 +728,15 @@
                 createSection.style.display = 'none';
                 manageSection.style.display = 'block';
 
-                const topics = Array.isArray(currentConference.topics) ? currentConference.topics.join(', ') : currentConference.topics;
-                document.getElementById('conferenceTitleDisplay').textContent = currentConference.title || 'N/A';
-                document.getElementById('conferenceUserDisplay').textContent = currentConference.user || 'N/A';
-                document.getElementById('conferenceTopicsDisplay').textContent = topics || 'None';
+                const topics = Array.isArray(currentConference.topics)
+                    ? currentConference.topics.join(', ')
+                    : currentConference.topics;
+                document.getElementById('conferenceTitleDisplay').textContent =
+                    currentConference.title || 'N/A';
+                document.getElementById('conferenceUserDisplay').textContent =
+                    currentConference.user || 'N/A';
+                document.getElementById('conferenceTopicsDisplay').textContent =
+                    topics || 'None';
             } else {
                 createSection.style.display = 'block';
                 manageSection.style.display = 'none';
@@ -393,32 +749,44 @@
             try {
                 const response = await fetch(CONFERENCE_API);
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    throw new Error('HTTP error! status: ' + response.status);
                 }
                 const conferences = await response.json();
 
                 updateConferenceSections(conferences);
 
                 if (conferences && conferences.length > 0) {
-                    let html = '<table><thead><tr><th>Title</th><th>User</th><th>Topics</th></tr></thead><tbody>';
+                    let html =
+                        '<div class="table-wrap"><table><thead><tr>' +
+                        '<th>Title</th><th>Host</th><th>Topics</th>' +
+                        '</tr></thead><tbody>';
 
-                    conferences.forEach(conf => {
-                        const topics = Array.isArray(conf.topics) ? conf.topics.join(', ') : conf.topics;
-                        html += `<tr>
-                            <td>${escapeHtml(conf.title || 'N/A')}</td>
-                            <td>${escapeHtml(conf.user || 'N/A')}</td>
-                            <td class="topic">${escapeHtml(topics || 'None')}</td>
-                        </tr>`;
+                    conferences.forEach((conf) => {
+                        const topics = Array.isArray(conf.topics)
+                            ? conf.topics.join(', ')
+                            : conf.topics;
+                        html +=
+                            '<tr><td>' +
+                            escapeHtml(conf.title || 'N/A') +
+                            '</td><td>' +
+                            escapeHtml(conf.user || 'N/A') +
+                            '</td><td class="topic">' +
+                            escapeHtml(topics || 'None') +
+                            '</td></tr>';
                     });
 
-                    html += '</tbody></table>';
+                    html += '</tbody></table></div>';
                     conferencesDiv.innerHTML = html;
                 } else {
-                    conferencesDiv.innerHTML = '<p class="muted">No active conferences</p>';
+                    conferencesDiv.innerHTML =
+                        '<p class="empty-state">No active conferences</p>';
                 }
             } catch (error) {
                 console.error('Error loading conferences:', error);
-                conferencesDiv.innerHTML = `<p class="status error">Error loading conferences: ${escapeHtml(error.message)}</p>`;
+                conferencesDiv.innerHTML =
+                    '<p class="empty-state">Error loading conferences: ' +
+                    escapeHtml(error.message) +
+                    '</p>';
             }
         }
 
@@ -436,22 +804,23 @@
             }
 
             exitButton.disabled = true;
-            exitButton.textContent = 'Exiting...';
+            exitButton.textContent = 'Exiting…';
             statusDiv.innerHTML = '';
 
             try {
                 const response = await fetch(CONFERENCE_API, {
                     method: 'DELETE',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        user: currentConference.user
-                    })
+                        user: currentConference.user,
+                    }),
                 });
 
                 if (response.ok) {
-                    statusDiv.innerHTML = '<div class="status success">Successfully exited conference!</div>';
+                    statusDiv.innerHTML =
+                        '<div class="status success">Successfully exited conference.</div>';
                     await loadConferences();
                     await loadTopics();
                     setTimeout(() => {
@@ -459,24 +828,27 @@
                     }, 3000);
                 } else {
                     const errorText = await response.text();
-                    throw new Error(`Failed to exit conference: ${response.status} - ${errorText}`);
+                    throw new Error(
+                        'Failed to exit conference: ' + response.status + ' - ' + errorText
+                    );
                 }
             } catch (error) {
                 console.error('Error exiting conference:', error);
-                statusDiv.innerHTML = `<div class="status error">Error: ${escapeHtml(error.message)}</div>`;
+                statusDiv.innerHTML =
+                    '<div class="status error">Error: ' + escapeHtml(error.message) + '</div>';
             } finally {
                 exitButton.disabled = false;
-                exitButton.textContent = 'Exit Conference';
+                exitButton.textContent = 'Exit conference';
             }
         }
 
         function escapeHtml(text) {
             const div = document.createElement('div');
-            div.textContent = text;
+            div.textContent = text == null ? '' : String(text);
             return div.innerHTML;
         }
 
-        window.addEventListener('load', function() {
+        window.addEventListener('load', function () {
             getUrlParams();
             loadTopics();
             loadConferences();

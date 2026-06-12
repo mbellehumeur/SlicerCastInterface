@@ -794,6 +794,16 @@ def _register_spa_client(app, mount_path: str, client_folder: str) -> bool:
         requested_file = os.path.join(client_dir, full_path)
         if os.path.isfile(requested_file):
             return FileResponse(requested_file)
+        if full_path == "favicon.ico":
+            svg_path = os.path.join(client_dir, "favicon.svg")
+            if os.path.isfile(svg_path):
+                return FileResponse(svg_path, media_type="image/svg+xml")
+            if mount_path == "worklist-client":
+                fallback = os.path.join(
+                    resources_dir, "images", "vtkjs-favicon.svg"
+                )
+                if os.path.isfile(fallback):
+                    return FileResponse(fallback, media_type="image/svg+xml")
         if os.path.isfile(index_path):
             return FileResponse(index_path)
         raise HTTPException(

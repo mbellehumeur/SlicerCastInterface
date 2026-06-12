@@ -37,6 +37,8 @@ There is value to being able to obtain real-time information from other applicat
 
 The cast request is technically a POST to the hub same as a normal event publish.  The only difference for the client is that the hub does not immediately respond with status code OK but forwards the request through the websocket connections to the relevant subscribers, collates their responses and sends the information back to the client in the POST response.
 
+In practice, each application supports responding to a status-request event.  On start-up the application publishes a status-request that is forwarded  all applications in the user workflow. The hub collates the responses and then the app makes the best use of that information to  display relevenant information at launch.
+
 The following animation shows the added resiliency and data exchange that this feature provides.
 
 *Animation description:  The user is reviewing a report on his tablet and walks over to the workstation to view the images.    The application is launched without context.  The application send a request event to find which study to load from the worklist client and then queries the reporting client to get the measurements in the template.  The measurements are used to populate annotation labeling drop-down in the image display tools.*

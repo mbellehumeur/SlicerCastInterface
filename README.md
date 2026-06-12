@@ -34,7 +34,7 @@ You can get a feeling of websocket subscription integration with the vtk-js IO m
 [![Cast worklist client](CastInterface/docs/images/worklist-client.png)](https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/worklist-client/examples/CastClient.html)
 
 
-Cast also has a context sharing strategy and hub architecture that diverges from FHIRcast, see description [here](CastInterface/docs/cast-description.md).
+Cast has a context/content sharing strategy and hub architecture that differ somewhat to FHIRcast, see description [here](CastInterface/docs/cast-description.md).
 
 
 
