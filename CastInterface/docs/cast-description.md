@@ -10,7 +10,7 @@ In addition to distributing FHIRcast events, Cast allows the following:
 
  - Support for resource servers.
 
- - Group topics for multi-user workflows, such as tumor boards or interventional procedures.
+ - Group topics for multi-user workflows, such as tumor boards or interventional procedures. See [conference-readme.md](conference-readme.md).
 
 
  - Use IHE actor naming (ID — Image Display; EC — Evidence Creator; WORKLIST_CLIENT, etc.) for advanced message routing.

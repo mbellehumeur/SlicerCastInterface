@@ -78,6 +78,8 @@ ACTION_SEARCH = "search"
 ACTION_ADD_STUDY = "addStudy"
 
 _job_busy = False
+_idc_client: Any = None
+_series_urls_cache: Dict[str, List[str]] = {}
 
 
 def _env_int(name: str, default: int) -> int:
@@ -337,6 +339,20 @@ def _validate_sql(sql: str) -> Optional[str]:
     return None
 
 
+def _sql_needs_volume_geometry_index(sql: str) -> bool:
+    """True when DuckDB SQL references ``volume_geometry_index`` (large auxiliary table)."""
+    normalized = _strip_sql_comments(sql).lower()
+    return "volume_geometry_index" in normalized
+
+
+def _ensure_idc_index_tables(client: Any, sql: str) -> None:
+    if _sql_needs_volume_geometry_index(sql):
+        _idc_log("fetch_index volume_geometry_index (referenced in SQL)")
+        client.fetch_index("volume_geometry_index")
+        return
+    _idc_log("skip fetch_index volume_geometry_index (index-only SQL)")
+
+
 def _call_anthropic_for_sql(prompt: str, max_studies: int) -> str:
     api_key, key_source = _resolve_anthropic_api_key_with_source()
     if not api_key:
@@ -362,7 +378,9 @@ def _call_anthropic_for_sql(prompt: str, max_studies: int) -> str:
         f"The query must return one row per series with StudyInstanceUID, "
         f"SeriesInstanceUID, PatientID, instanceCount, series_size_MB, and "
         f"SeriesDescription when available. Use LIMIT {max_studies} or less at the "
-        "outermost query. Prefer joins to volume_geometry_index for 3D CT/MR volumes."
+        "outermost query. Join volume_geometry_index only for 3D CT/MR volume "
+        "filters (regularly_spaced_3d_volume). For US/MG/PT or index-only requests, "
+        "query the `index` table only — do not join volume_geometry_index."
     )
     client = anthropic.Anthropic(api_key=api_key)
     user_message = prompt.strip()
@@ -467,10 +485,7 @@ def _attach_series_urls(client, study: Dict[str, Any], source_bucket: str) -> di
         except ValueError:
             size_mb = 0.0
 
-    urls = client.get_series_file_URLs(
-        seriesInstanceUID=series_uid,
-        source_bucket_location=source_bucket,
-    )
+    urls = _get_series_file_urls(client, series_uid, source_bucket)
     if slice_count and len(urls) != slice_count:
         _idc_log_error(
             "idc %s: URL count %d != instanceCount %d",
@@ -498,14 +513,56 @@ def _attach_series_urls(client, study: Dict[str, Any], source_bucket: str) -> di
 
 
 
-def _resolve_idc_client():
+def _series_urls_cache_key(series_uid: str, source_bucket: str) -> str:
+    return f"{source_bucket}:{series_uid}"
+
+
+def _get_series_file_urls(client: Any, series_uid: str, source_bucket: str) -> List[str]:
+    key = _series_urls_cache_key(series_uid, source_bucket)
+    cached = _series_urls_cache.get(key)
+    if cached is not None:
+        _idc_log(
+            "series URLs cache hit series=%s bucket=%s files=%d",
+            series_uid,
+            source_bucket,
+            len(cached),
+        )
+        return cached
+
+    t0 = time.time()
+    urls = client.get_series_file_URLs(
+        seriesInstanceUID=series_uid,
+        source_bucket_location=source_bucket,
+    )
+    url_list = list(urls)
+    _idc_log(
+        "get_series_file_URLs elapsed=%.1fs series=%s bucket=%s files=%d",
+        time.time() - t0,
+        series_uid,
+        source_bucket,
+        len(url_list),
+    )
+    _series_urls_cache[key] = url_list
+    return url_list
+
+
+def _resolve_idc_client() -> Any:
+    global _idc_client
+    if _idc_client is not None:
+        return _idc_client
     try:
         from idc_index import IDCClient
     except ImportError as exc:
         raise RuntimeError(
             "idc-index is not installed. Run: pip install idc-index"
         ) from exc
-    return IDCClient()
+    factory = getattr(IDCClient, "client", None)
+    if callable(factory):
+        _idc_client = factory()
+    else:
+        _idc_client = IDCClient()
+    _idc_log("IDCClient initialized (reused for later search/add in this session)")
+    return _idc_client
 
 
 def _search_idc_studies(
@@ -529,11 +586,19 @@ def _search_idc_studies(
         max_studies,
         organization_label,
     )
+    t0 = time.time()
     sql = _call_anthropic_for_sql(prompt, max_studies)
+    _idc_log("Claude SQL ready elapsed=%.1fs", time.time() - t0)
 
     client = _resolve_idc_client()
-    client.fetch_index("volume_geometry_index")
+    t1 = time.time()
+    _ensure_idc_index_tables(client, sql)
+    if time.time() - t1 >= 0.05:
+        _idc_log("index table prep elapsed=%.1fs", time.time() - t1)
+    t2 = time.time()
     rows = client.sql_query(sql)
+    row_count = 0 if rows is None else len(rows.index)
+    _idc_log("sql_query done elapsed=%.1fs rows=%d", time.time() - t2, row_count)
     rows = _post_process_rows(rows, max_studies, max_slices, max_size_mb)
     if rows is None or rows.empty:
         _idc_log("search matched 0 series after filters")
@@ -586,6 +651,7 @@ def _add_idc_study_with_urls(
         series_uid,
         study_in.get("id") or "",
     )
+    t0 = time.time()
     client = _resolve_idc_client()
     study = _attach_series_urls(client, dict(study_in), bucket)
     if organization:
@@ -593,9 +659,10 @@ def _add_idc_study_with_urls(
 
     file_count = len(study.get("files") or [])
     _idc_log(
-        "addStudy done study_id=%s files=%d",
+        "addStudy done study_id=%s files=%d elapsed=%.1fs",
         study.get("id") or series_uid,
         file_count,
+        time.time() - t0,
     )
     return {
         "source": "idc-claude",

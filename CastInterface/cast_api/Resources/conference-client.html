@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cast Conference</title>
+    <title>Conferencing</title>
     <link rel="icon" id="app-favicon" type="image/png" href="/static/images/3DSlicer-DesktopIcon.png">
     <style>
         :root {
@@ -99,40 +99,40 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             margin: 0;
-            padding: 8px;
+            padding: 4px;
             background-color: var(--bg-page);
             color: var(--text-primary);
-            line-height: 1.4;
-            font-size: 13px;
+            line-height: 1.35;
+            font-size: 12px;
         }
         .page {
-            max-width: 640px;
+            max-width: 100%;
             margin: 0 auto;
         }
         .surface {
             background: var(--bg-surface);
             border: 1px solid var(--border);
-            border-radius: 8px;
+            border-radius: 6px;
             box-shadow: var(--shadow-surface);
-            padding: 12px 14px;
+            padding: 8px 10px;
         }
         .page-header {
             display: flex;
             flex-wrap: wrap;
             align-items: flex-start;
             justify-content: space-between;
-            gap: 8px;
-            margin-bottom: 10px;
+            gap: 6px;
+            margin-bottom: 6px;
         }
         .page-header-brand h1 {
             margin: 0;
-            font-size: 1.15rem;
+            font-size: 1rem;
             font-weight: 500;
             color: var(--accent);
         }
         .page-header-brand .subtitle {
-            margin: 2px 0 0;
-            font-size: 12px;
+            margin: 1px 0 0;
+            font-size: 11px;
             color: var(--text-secondary);
         }
         .header-actions {
@@ -168,13 +168,13 @@
         .context-bar {
             display: flex;
             flex-wrap: wrap;
-            gap: 6px 12px;
-            padding: 8px 10px;
-            margin-bottom: 10px;
+            gap: 4px 10px;
+            padding: 6px 8px;
+            margin-bottom: 6px;
             background: var(--bg-muted);
-            border-radius: 8px;
-            border-left: 4px solid var(--info-border);
-            font-size: 13px;
+            border-radius: 6px;
+            border-left: 3px solid var(--info-border);
+            font-size: 12px;
         }
         .context-bar strong {
             color: var(--text-primary);
@@ -212,18 +212,18 @@
         .grid-two {
             display: grid;
             grid-template-columns: 1fr;
-            gap: 10px;
-            margin-bottom: 10px;
+            gap: 6px;
+            margin-bottom: 6px;
         }
         .card {
             background: var(--bg-muted);
             border: 1px solid var(--border);
             border-radius: 6px;
-            padding: 10px 12px;
+            padding: 8px 10px;
         }
         .card h2 {
-            margin: 0 0 10px;
-            font-size: 0.95rem;
+            margin: 0 0 6px;
+            font-size: 0.9rem;
             font-weight: 600;
             color: var(--text-primary);
         }
@@ -295,20 +295,20 @@
         }
         .info-box {
             background-color: var(--bg-surface);
-            padding: 8px 10px;
+            padding: 6px 8px;
             border-radius: 6px;
-            margin-bottom: 10px;
+            margin-bottom: 6px;
             border: 1px solid var(--border);
-            font-size: 13px;
+            font-size: 12px;
         }
         .info-box p {
-            margin: 0 0 8px;
+            margin: 0 0 4px;
         }
         .info-box p:last-child {
             margin-bottom: 0;
         }
         .topics-panel {
-            max-height: 140px;
+            max-height: 88px;
             overflow-y: auto;
             border: 1px solid var(--border-btn);
             border-radius: 6px;
@@ -355,10 +355,10 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 420px;
+            min-width: 0;
         }
         th, td {
-            padding: 7px 10px;
+            padding: 5px 8px;
             text-align: left;
             border-bottom: 1px solid var(--border);
             color: var(--text-primary);
@@ -406,7 +406,7 @@
             }
             document.documentElement.dataset.mode = mode;
             const isSlicer = theme === '3dslicer';
-            document.title = isSlicer ? '3D Slicer Cast Conference' : 'Cast Conference';
+            document.title = isSlicer ? '3D Slicer Conferencing' : 'Conferencing';
             const favicon = document.getElementById('app-favicon');
             if (favicon) {
                 if (isSlicer) {
@@ -441,8 +441,8 @@
         <div class="surface">
             <header class="page-header">
                 <div class="page-header-brand">
-                    <h1>Cast Conference</h1>
-                    <p class="subtitle">Multi-participant Cast hub sessions</p>
+                    <h1>Conferencing</h1>
+                    <p class="subtitle">Multi-participant hub sessions</p>
                 </div>
                 <div class="header-actions">
                     <div class="theme-toggle" role="group" aria-label="Color mode">
@@ -464,7 +464,8 @@
                             <label for="title">Conference title</label>
                             <select id="title" required onchange="handleTitleChange()">
                                 <option value="">Select a conference title</option>
-                                <option value="Test conference" selected>Test conference</option>
+                                <option value="Test conference">Test conference</option>
+                                <option value="US annotations" selected>US annotations</option>
                                 <option value="Tumor Board">Tumor Board</option>
                                 <option value="Case discussion">Case discussion</option>
                                 <option value="Pedicle screw">Pedicle screw</option>
@@ -476,9 +477,9 @@
                             <input type="text" id="otherTitle" placeholder="Enter conference title">
                         </div>
                         <div class="form-group">
-                            <label>Topics</label>
+                            <label>Users</label>
                             <div id="topicsList" class="topics-panel">
-                                <p class="muted">Loading topics…</p>
+                                <p class="muted">Loading users…</p>
                             </div>
                         </div>
                         <div class="btn-row">
@@ -492,7 +493,7 @@
                     <div id="conferenceInfo" class="info-box">
                         <p><strong>Title:</strong> <span id="conferenceTitleDisplay">—</span></p>
                         <p><strong>Host:</strong> <span id="conferenceUserDisplay">—</span></p>
-                        <p><strong>Topics:</strong> <span id="conferenceTopicsDisplay">—</span></p>
+                        <p><strong>Users:</strong> <span id="conferenceTopicsDisplay">—</span></p>
                     </div>
                     <div class="btn-row">
                         <button type="button" id="exitConferenceButton" class="primary" onclick="exitConference()">Exit conference</button>
@@ -500,8 +501,8 @@
                 </div>
             </div>
 
-            <section class="section-card">
-                <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px;">
+            <section id="activeConferencesSection" class="section-card">
+                <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 6px;">
                     <h2 style="margin: 0;">Active conferences</h2>
                     <button type="button" class="primary" onclick="loadConferences()">Refresh</button>
                 </div>
@@ -537,15 +538,15 @@
                 bar.className = 'context-bar warn';
                 bar.hidden = false;
                 bar.innerHTML =
-                    '<span><strong>Subscriber not set.</strong> Open this page from a Cast client ' +
+                    '<span><strong>Subscriber not set.</strong> Open this page from a client ' +
                     '(<em>Conferencing</em> menu) or add <code>?subscriberName=…&amp;topic=…</code> to the URL.</span>';
                 return;
             }
             bar.className = 'context-bar';
             bar.hidden = false;
             const topicPart = topicName
-                ? '<span><strong>Topic:</strong> ' + escapeHtml(topicName) + '</span>'
-                : '<span class="muted">No topic in URL</span>';
+                ? '<span><strong>User:</strong> ' + escapeHtml(topicName) + '</span>'
+                : '<span class="muted">No user in URL</span>';
             bar.innerHTML =
                 '<span><strong>Subscriber:</strong> ' +
                 escapeHtml(subscriberName) +
@@ -593,12 +594,12 @@
                     });
                     topicsDiv.innerHTML = html;
                 } else {
-                    topicsDiv.innerHTML = '<p class="muted">No topics available</p>';
+                    topicsDiv.innerHTML = '<p class="muted">No users available</p>';
                 }
             } catch (error) {
                 console.error('Error loading topics:', error);
                 topicsDiv.innerHTML =
-                    '<p class="muted">Error loading topics: ' +
+                    '<p class="muted">Error loading users: ' +
                     escapeHtml(error.message) +
                     '</p>';
             }
@@ -653,7 +654,7 @@
             const selectedTopics = getSelectedTopics();
             if (selectedTopics.length === 0) {
                 statusDiv.innerHTML =
-                    '<div class="status error">Please select at least one topic</div>';
+                    '<div class="status error">Please select at least one user</div>';
                 return;
             }
 
@@ -723,10 +724,14 @@
             currentConference = checkTopicInConference(conferences);
             const createSection = document.getElementById('createConferenceSection');
             const manageSection = document.getElementById('manageConferenceSection');
+            const activeSection = document.getElementById('activeConferencesSection');
 
             if (currentConference) {
                 createSection.style.display = 'none';
                 manageSection.style.display = 'block';
+                if (activeSection) {
+                    activeSection.style.display = 'none';
+                }
 
                 const topics = Array.isArray(currentConference.topics)
                     ? currentConference.topics.join(', ')
@@ -740,6 +745,9 @@
             } else {
                 createSection.style.display = 'block';
                 manageSection.style.display = 'none';
+                if (activeSection) {
+                    activeSection.style.display = '';
+                }
             }
         }
 
@@ -758,7 +766,7 @@
                 if (conferences && conferences.length > 0) {
                     let html =
                         '<div class="table-wrap"><table><thead><tr>' +
-                        '<th>Title</th><th>Host</th><th>Topics</th>' +
+                        '<th>Title</th><th>Host</th><th>Users</th>' +
                         '</tr></thead><tbody>';
 
                     conferences.forEach((conf) => {

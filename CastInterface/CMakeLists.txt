@@ -15,6 +15,7 @@ set(MODULE_PYTHON_SCRIPTS
   Lib/CastResourceServers.py
   Lib/cast_client.py
   Lib/cast_provider_runtime.py
+  Lib/image_display_client_annotations.py
   Lib/image_display_client_handler.py
   Lib/image_display_client_hub.py
   Lib/image_display_client_load.py
