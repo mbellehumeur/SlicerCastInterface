@@ -27,11 +27,19 @@ Cast is an offshoot of FHIRcast (<https://fhircast.hl7.org/>). FHIRcast is the s
 
 
 
-You can experience websocket subscription integration with the vtk-js IO module cast interface example. Open several viewers instances, open a study in the worklist  and use the "Open scene views" button to view cross-product multi-host display layouts:
+You can test websocket subscription integration with the vtk-js IO module cast interface example. Open several viewers instances, open a study in the worklist  and use the "Open scene views" button to view cross-product multi-host display layouts:
 [Open  worklist demo](https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/worklist-client/examples/CastClient/index.html)
 
 
 [![Cast worklist client](CastInterface/docs/images/worklist-client.png)](https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/worklist-client/examples/CastClient.html)
+
+The worklist example demonstrates:
+
+- **IDC Claude** — Build a personal IDC study worklist from natural-language queries; Claude and the idc-index run as a hub-connected resource server.
+- **OHIF** — Open OHIF viewer instances that stay in sync with the worklist.
+- **VolView** — Open VolView instances that stay in sync with the worklist.
+- **Scene view** — Show each connected image display’s layout (including 3D slicer on same or remote hosts).
+- **Total Segmentator** — From OHIF or VolView, send an MR or CT study to TotalSegmentator and receive segmentation results (SEG or RTSTRUCT).  Total segmentator is connected to the hub as a resource server.
 
 
 Cast has a context/content sharing strategy and hub architecture that differs somewhat to FHIRcast, see description [here](CastInterface/docs/cast-description.md).

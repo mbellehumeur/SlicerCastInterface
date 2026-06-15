@@ -774,6 +774,33 @@
         .event-name:hover {
             color: var(--accent-hover);
         }
+        .publisher-name {
+            color: var(--accent);
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .publisher-name:hover {
+            color: var(--accent-hover);
+        }
+        .message-log-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .clear-log-btn {
+            padding: 6px 12px;
+            font-size: 13px;
+            background-color: var(--bg-btn-primary);
+            color: var(--text-on-accent);
+            border: 1px solid var(--accent-hover);
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .clear-log-btn:hover {
+            background-color: var(--bg-btn-primary-hover);
+            border-color: var(--accent);
+        }
         .event-details {
             display: none;
             margin-top: 10px;
@@ -1136,8 +1163,9 @@
         <h2>Conferences</h2>
         <div id="conferencesTable"></div>
         <div class="audit-log">
-            <h2>
-                Message Log
+            <h2 class="message-log-title">
+                <span>Message Log</span>
+                <button type="button" class="clear-log-btn" onclick="clearAuditLog()">Clear log</button>
             </h2>
             <div class="filters">
                 <select id="publisherFilter">
@@ -1962,6 +1990,76 @@
             return 'N/A';
         }
 
+        function formatAuditMessageParameters(entry) {
+            if (entry.message_params && typeof entry.message_params === 'object') {
+                return entry.message_params;
+            }
+            return formatAuditMessageParametersLegacy(entry);
+        }
+
+        function formatAuditMessageParametersLegacy(entry) {
+            const pub = entry.publisher || {};
+            const data = entry.event_data;
+            const isRequest = isCastRequestEntry(entry);
+            const out = {
+                timestamp: entry.timestamp,
+                direction: entry.direction || 'received',
+            };
+            const name = (pub.name || entry.subscriber || '').trim();
+            if (name) {
+                out['subscriber.name'] = name;
+            }
+            const product = (pub.product || '').trim();
+            if (product) {
+                out['subscriber.product.name'] = product;
+            }
+            out.event = {
+                'hub.topic': entry.topic,
+                'hub.event': entry.event_name,
+            };
+            if (isRequest && data && typeof data === 'object') {
+                if (data.id) {
+                    out.id = data.id;
+                }
+                if (data.requestedActor) {
+                    out['subscriber.actor'] = data.requestedActor;
+                }
+                if (data.requestedTargetActor) {
+                    out['target.actor'] = data.requestedTargetActor;
+                }
+                if (data.requestedProductName) {
+                    out['target.product.name'] = data.requestedProductName;
+                }
+                const dt = data.dataType || getCastRequestDataType(entry);
+                if (dt || data.id) {
+                    out.event.context = {
+                        ...(dt ? { dataType: dt } : {}),
+                        ...(data.id ? { id: data.id } : {}),
+                    };
+                }
+                out.requestStatus = {
+                    status: data.status,
+                    timedOut: data.timedOut,
+                    expectedSubscribers: data.expectedSubscribers,
+                    missingSubscribers: data.missingSubscribers,
+                    error: data.error,
+                };
+                return out;
+            }
+            if (data && typeof data === 'object' && !Array.isArray(data)) {
+                const meta = {};
+                for (const key of ['dataType', 'id', 'level', 'action']) {
+                    if (data[key] != null) {
+                        meta[key] = data[key];
+                    }
+                }
+                if (Object.keys(meta).length) {
+                    out.event.context = meta;
+                }
+            }
+            return out;
+        }
+
         function buildReceivedLogRows(allEntries) {
             const received = allEntries.filter(e => (e.direction || 'received') === 'received');
             const byKey = new Map();
@@ -2022,6 +2120,7 @@
                     '. ' +
                     formatMessageLogTimestampHtml(date);
                 const eventData = JSON.stringify(rep.event_data, null, 2);
+                const paramData = JSON.stringify(formatAuditMessageParameters(rep), null, 2);
                 const castDataType = getCastRequestDataType(rep);
                 const castResponders = isCastRequest
                     ? getCastRequestRespondersFromLog(allEntries, rep)
@@ -2043,7 +2142,9 @@
                         : '<span class="delivered-to-none">\u2014</span>');
                 html += `<tr class="audit-row-received">
                      <td class="timestamp">${timestampHtml}</td>
-                    <td>${escapeHtml(formatPublisher(rep))}</td>
+                    <td><span class="publisher-name" onclick="togglePublisherDetails(${index})" title="Show message parameters">${
+                    escapeHtml(formatPublisher(rep))
+                }</span></td>
                     <td class="topic">${escapeHtml(rep.topic || 'N/A')}</td>
                     <td><span class="event-name" onclick="toggleEventDetails(${index})" title="${escapeAttr(hoverText)}">${escapeHtml(eventNameText)}</span></td>
                     <td class="delivered-to" title="${escapeAttr(hoverText)}">${deliveredCell}</td>
@@ -2052,6 +2153,7 @@
                 <tr>
                     <td colspan="5">
                         <div class="event-details" id="eventDetails${index}">${escapeHtml(eventData)}</div>
+                        <div class="event-details publisher-params" id="publisherDetails${index}">${escapeHtml(paramData)}</div>
                     </td>
                 </tr>`;
             });
@@ -2062,7 +2164,43 @@
         
         function toggleEventDetails(index) {
             const detailsDiv = document.getElementById('eventDetails' + index);
-            if (detailsDiv) detailsDiv.classList.toggle('show');
+            const publisherDiv = document.getElementById('publisherDetails' + index);
+            if (publisherDiv) {
+                publisherDiv.classList.remove('show');
+            }
+            if (detailsDiv) {
+                detailsDiv.classList.toggle('show');
+            }
+        }
+
+        function togglePublisherDetails(index) {
+            const publisherDiv = document.getElementById('publisherDetails' + index);
+            const detailsDiv = document.getElementById('eventDetails' + index);
+            if (detailsDiv) {
+                detailsDiv.classList.remove('show');
+            }
+            if (publisherDiv) {
+                publisherDiv.classList.toggle('show');
+            }
+        }
+
+        async function clearAuditLog() {
+            if (!confirm('Clear all message log entries?')) {
+                return;
+            }
+            try {
+                const res = await fetch('/api/hub/admin/clear-audit-log', { method: 'POST' });
+                if (!res.ok) {
+                    const text = await res.text();
+                    throw new Error(text || `HTTP ${res.status}`);
+                }
+                loadSnapshot();
+            } catch (err) {
+                alert(
+                    'Failed to clear log: ' +
+                        (err instanceof Error ? err.message : String(err))
+                );
+            }
         }
         
         function escapeHtml(text) {

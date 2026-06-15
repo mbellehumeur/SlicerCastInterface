@@ -1,7 +1,12 @@
 """IDC Claude Cast resource server — NL prompt to IDC worklist manifest.
 
-Plain Python script (no Qt). Wired via Resource Servers + resource_server_hub
-``idc-claude-request`` dispatch. Uses Anthropic API + idc-index locally.
+Plain Python script (no Qt). Wired via Resource Servers + resource_server_hub:
+
+- ``idc-claude-send`` (publish): detached job; ``status-update`` progress + result
+  ``idc-claude-send`` back to the requester (worklist client).
+- ``idc-claude-request`` (legacy RPC): collated ``idc-claude-response`` on HTTP request.
+
+Uses Anthropic API + idc-index locally.
 
 Cast UI: product ``IDCCLAUDE``, script path to this file, Connect.
 """
@@ -9,16 +14,17 @@ Cast UI: product ``IDCCLAUDE``, script path to this file, Connect.
 from __future__ import annotations
 
 import hashlib
-import logging
 import os
 import re
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
-LOGGER = logging.getLogger("CastInterface.IDCCLAUDE")
+from Lib.cast_provider_runtime import publish_idc_claude_send, publish_status_update
+
 _LOG_PREFIX = "IDCCLAUDE"
 
 
@@ -30,31 +36,15 @@ def _idc_log(message: str, *args: Any) -> None:
     text = _format_log_message(message, *args).rstrip()
     if not text:
         return
-    line = f"{_LOG_PREFIX}: {text}"
-    print(line, flush=True)
-    LOGGER.info(text)
+    print(f"{_LOG_PREFIX}: {text}", flush=True)
 
 
 def _idc_log_error(message: str, *args: Any) -> None:
     text = _format_log_message(message, *args).rstrip()
     if not text:
         return
-    line = f"{_LOG_PREFIX}: {text}"
-    print(line, file=sys.stderr, flush=True)
-    LOGGER.warning(text)
+    print(f"{_LOG_PREFIX}: {text}", file=sys.stderr, flush=True)
 
-
-def _configure_idc_claude_logging() -> None:
-    LOGGER.setLevel(logging.INFO)
-    if LOGGER.handlers:
-        return
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter(f"{_LOG_PREFIX}: %(message)s"))
-    LOGGER.addHandler(handler)
-    LOGGER.propagate = False
-
-
-_configure_idc_claude_logging()
 
 DEFAULT_PRODUCT_NAME = "IDCCLAUDE"
 _SCRIPT_DIR = Path(__file__).resolve().parent
@@ -76,10 +66,13 @@ SOURCE_BUCKET_DEFAULT = "aws"
 
 ACTION_SEARCH = "search"
 ACTION_ADD_STUDY = "addStudy"
+IDC_CLAUDE_SEND_EVENT = "idc-claude-send"
 
 _job_busy = False
 _idc_client: Any = None
 _series_urls_cache: Dict[str, List[str]] = {}
+_job_serial = 0
+_job_status_context: Dict[str, str] = {}
 
 
 def _env_int(name: str, default: int) -> int:
@@ -102,8 +95,24 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _read_skill_version_label() -> str:
+    path = _SKILL_DIR / "VERSION"
+    if not path.is_file():
+        return ""
+    lines: List[str] = []
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        lines.append(line)
+    return ", ".join(lines)
+
+
 def _read_skill_excerpt() -> str:
     parts: List[str] = []
+    version_label = _read_skill_version_label()
+    if version_label:
+        parts.append(f"Bundled IDC skill excerpt ({version_label}).")
     for name in ("system_prompt.md", "sql_rules.md"):
         path = _SKILL_DIR / name
         if path.is_file():
@@ -277,6 +286,118 @@ def build_status_response(provider: Any) -> Dict[str, Any]:
     }
 
 
+def _start_job(topic: str, product_name: str, target_subscriber: str) -> int:
+    global _job_serial, _job_status_context
+    _job_serial += 1
+    job_number = _job_serial
+    _job_status_context = {
+        "topic": (topic or "").strip(),
+        "product_name": (product_name or DEFAULT_PRODUCT_NAME).strip()
+        or DEFAULT_PRODUCT_NAME,
+        "target_subscriber": (target_subscriber or "").strip(),
+        "job_number": str(job_number),
+    }
+    return job_number
+
+
+def _clear_job_status_context() -> None:
+    global _job_status_context
+    _job_status_context = {}
+
+
+def _job_prefix() -> str:
+    job_number = _job_status_context.get("job_number", "").strip()
+    return f"Job #{job_number}: " if job_number else ""
+
+
+def _status_clock() -> str:
+    return datetime.now().strftime("%H:%M:%S")
+
+
+def _format_status_line(text: str) -> str:
+    return f"[{_status_clock()}] {_job_prefix()}{text}"
+
+
+def _requester_subscriber_from_message(message: Dict[str, Any]) -> str:
+    """Worklist subscriber to target for ``status-update`` / result fan-out."""
+    event = message.get("event") or {}
+    if isinstance(event, dict):
+        sender = event.get("sender")
+        if isinstance(sender, dict):
+            name = str(
+                sender.get("subscriber") or sender.get("name") or ""
+            ).strip()
+            if name:
+                return name
+    return str(
+        message.get("subscriber.name") or message.get("subscriber") or ""
+    ).strip()
+
+
+def _emit_status_update(line: str, level: str = "info") -> None:
+    ctx = _job_status_context
+    target = ctx.get("target_subscriber", "")
+    topic = ctx.get("topic", "")
+    if not target or not topic:
+        return
+    publish_status_update(
+        ctx.get("product_name", DEFAULT_PRODUCT_NAME),
+        topic,
+        target,
+        line,
+        level,
+    )
+
+
+def _status_log(message: str, *args: Any) -> None:
+    text = _format_log_message(message, *args).rstrip()
+    if not text:
+        return
+    line = _format_status_line(text)
+    _idc_log(line)
+    _emit_status_update(line, "info")
+
+
+def _status_error(message: str, *args: Any) -> None:
+    text = _format_log_message(message, *args).rstrip()
+    if not text:
+        return
+    line = _format_status_line(text)
+    _idc_log_error(line)
+    _emit_status_update(line, "error")
+
+
+def _status_job_finished() -> None:
+    if not _job_status_context.get("job_number", "").strip():
+        return
+    finished_at = _status_clock()
+    line = _format_status_line(f"Job finished at {finished_at}")
+    _idc_log(line)
+    _emit_status_update(line, "info")
+
+
+def _publish_idc_claude_result(
+    product_name: str,
+    topic: str,
+    target_subscriber: str,
+    correlation_id: str,
+    payload: Dict[str, Any],
+) -> None:
+    if not publish_idc_claude_send(
+        product_name,
+        topic,
+        target_subscriber,
+        correlation_id,
+        payload,
+    ):
+        _idc_log_error(
+            "publish idc-claude-send failed topic=%s target=%s id=%s",
+            topic,
+            target_subscriber,
+            correlation_id,
+        )
+
+
 def s3_uri_to_public_https(url: str) -> str:
     if not url.startswith("s3://"):
         return url
@@ -339,18 +460,31 @@ def _validate_sql(sql: str) -> Optional[str]:
     return None
 
 
-def _sql_needs_volume_geometry_index(sql: str) -> bool:
-    """True when DuckDB SQL references ``volume_geometry_index`` (large auxiliary table)."""
+_AUXILIARY_INDEX_TABLES = (
+    "volume_geometry_index",
+    "collections_index",
+    "ct_index",
+    "mr_index",
+    "pt_index",
+    "seg_index",
+    "analysis_results_index",
+)
+
+
+def _auxiliary_index_tables_in_sql(sql: str) -> List[str]:
     normalized = _strip_sql_comments(sql).lower()
-    return "volume_geometry_index" in normalized
+    return [name for name in _AUXILIARY_INDEX_TABLES if name in normalized]
 
 
 def _ensure_idc_index_tables(client: Any, sql: str) -> None:
-    if _sql_needs_volume_geometry_index(sql):
-        _idc_log("fetch_index volume_geometry_index (referenced in SQL)")
-        client.fetch_index("volume_geometry_index")
+    tables = _auxiliary_index_tables_in_sql(sql)
+    if not tables:
+        _idc_log("skip fetch_index auxiliary tables (index-only SQL)")
         return
-    _idc_log("skip fetch_index volume_geometry_index (index-only SQL)")
+    for table_name in tables:
+        _idc_log("fetch_index %s (referenced in SQL)", table_name)
+        _status_log("Refreshing IDC index table %s…", table_name)
+        client.fetch_index(table_name)
 
 
 def _call_anthropic_for_sql(prompt: str, max_studies: int) -> str:
@@ -369,18 +503,14 @@ def _call_anthropic_for_sql(prompt: str, max_studies: int) -> str:
 
     model = _resolve_anthropic_model()
     skill_text = _read_skill_excerpt()
+    version_label = _read_skill_version_label()
+    if version_label:
+        _idc_log("IDC skill bundle: %s", version_label)
     system = (
         f"{skill_text}\n\n"
-        "You write DuckDB SQL for idc-index against the `index` table and related "
-        "index tables. Return ONLY one DuckDB SQL statement, optionally wrapped in "
-        "```sql fences. Use WITH ... SELECT CTEs when helpful. Do not add prose "
-        "before or after the SQL. "
-        f"The query must return one row per series with StudyInstanceUID, "
-        f"SeriesInstanceUID, PatientID, instanceCount, series_size_MB, and "
-        f"SeriesDescription when available. Use LIMIT {max_studies} or less at the "
-        "outermost query. Join volume_geometry_index only for 3D CT/MR volume "
-        "filters (regularly_spaced_3d_volume). For US/MG/PT or index-only requests, "
-        "query the `index` table only — do not join volume_geometry_index."
+        "Return ONLY one DuckDB SQL statement, optionally wrapped in ```sql fences. "
+        "No prose, Python, or download commands. "
+        f"Use LIMIT {max_studies} or less on the outermost query."
     )
     client = anthropic.Anthropic(api_key=api_key)
     user_message = prompt.strip()
@@ -586,9 +716,11 @@ def _search_idc_studies(
         max_studies,
         organization_label,
     )
+    _status_log("Calling Claude for SQL (may take 1–2 minutes)…")
     t0 = time.time()
     sql = _call_anthropic_for_sql(prompt, max_studies)
     _idc_log("Claude SQL ready elapsed=%.1fs", time.time() - t0)
+    _status_log("SQL ready, querying IDC index…")
 
     client = _resolve_idc_client()
     t1 = time.time()
@@ -651,6 +783,7 @@ def _add_idc_study_with_urls(
         series_uid,
         study_in.get("id") or "",
     )
+    _status_log("Resolving public DICOM URLs…")
     t0 = time.time()
     client = _resolve_idc_client()
     study = _attach_series_urls(client, dict(study_in), bucket)
@@ -677,8 +810,11 @@ def _organization_id(prompt: str) -> str:
     return f"idc-custom-{digest[:6]}"
 
 
-def build_idc_claude_response(request_context: Dict[str, Any], provider: Any) -> Dict[str, Any]:
-    global _job_busy, _env_local_cache
+def _build_idc_claude_payload(
+    request_context: Dict[str, Any],
+    provider: Any,
+) -> Dict[str, Any]:
+    global _env_local_cache
     _env_local_cache = None
     action = str(request_context.get("action") or ACTION_SEARCH).strip() or ACTION_SEARCH
 
@@ -695,13 +831,6 @@ def build_idc_claude_response(request_context: Dict[str, Any], provider: Any) ->
     source_bucket = (os.getenv("IDC_CLAUDE_SOURCE_BUCKET") or SOURCE_BUCKET_DEFAULT).strip()
 
     prompt = str(request_context.get("prompt") or "").strip()
-    _idc_log(
-        "idc-claude-request action=%s max_studies=%d context_keys=%s",
-        action,
-        max_studies,
-        sorted(request_context.keys()),
-    )
-    _job_busy = True
     try:
         if action == ACTION_ADD_STUDY:
             return _add_idc_study_with_urls(request_context, source_bucket)
@@ -723,5 +852,97 @@ def build_idc_claude_response(request_context: Dict[str, Any], provider: Any) ->
         if action:
             payload["action"] = action
         return payload
+
+
+def build_idc_claude_response(request_context: Dict[str, Any], provider: Any) -> Dict[str, Any]:
+    global _job_busy
+    action = str(request_context.get("action") or ACTION_SEARCH).strip() or ACTION_SEARCH
+    max_studies = _env_int("IDC_CLAUDE_MAX_STUDIES", MAX_STUDIES_DEFAULT)
+    raw_max = request_context.get("maxStudies")
+    if raw_max is not None:
+        try:
+            max_studies = max(1, min(int(raw_max), max_studies))
+        except (TypeError, ValueError):
+            pass
+    _idc_log(
+        "idc-claude-request action=%s max_studies=%d context_keys=%s",
+        action,
+        max_studies,
+        sorted(request_context.keys()),
+    )
+    _job_busy = True
+    try:
+        return _build_idc_claude_payload(request_context, provider)
     finally:
         _job_busy = False
+
+
+def onMessage(message: Dict[str, Any], provider: Any) -> None:
+    """Handle detached ``idc-claude-send`` jobs from the worklist client."""
+    event = message.get("event") or {}
+    if event.get("hub.event") != IDC_CLAUDE_SEND_EVENT:
+        return
+    context = event.get("context") or {}
+    if not isinstance(context, dict):
+        return
+    topic = str(event.get("hub.topic") or "").strip()
+    target_subscriber = _requester_subscriber_from_message(message)
+    product_name = getattr(provider, "product_name", "") or DEFAULT_PRODUCT_NAME
+    correlation_id = str(context.get("id") or "").strip()
+    action = str(context.get("action") or ACTION_SEARCH).strip() or ACTION_SEARCH
+    if not topic:
+        _idc_log_error("idc-claude-send missing hub.topic")
+        return
+    if not target_subscriber:
+        _idc_log_error("idc-claude-send missing requester subscriber.name")
+        return
+    if not correlation_id:
+        _idc_log_error("idc-claude-send missing context.id")
+        return
+
+    global _job_busy
+    _idc_log(
+        "idc-claude-send action=%s id=%s requester=%s",
+        action,
+        correlation_id,
+        target_subscriber,
+    )
+    _job_busy = True
+    _start_job(topic, product_name, target_subscriber)
+    try:
+        _status_log("IDC job accepted")
+        payload = _build_idc_claude_payload(context, provider)
+        _publish_idc_claude_result(
+            product_name,
+            topic,
+            target_subscriber,
+            correlation_id,
+            payload,
+        )
+        if payload.get("error"):
+            _status_error("%s", payload.get("error"))
+        elif action == ACTION_ADD_STUDY:
+            study = payload.get("study") if isinstance(payload.get("study"), dict) else {}
+            file_count = len(study.get("files") or [])
+            _status_log("Resolved %d DICOM URLs", file_count)
+        else:
+            study_count = len(payload.get("studies") or [])
+            _status_log("Found %d studies", study_count)
+    except Exception as exc:
+        _idc_log_error("idc-claude-send failed: %s", exc)
+        _publish_idc_claude_result(
+            product_name,
+            topic,
+            target_subscriber,
+            correlation_id,
+            {
+                "source": "idc-claude",
+                "error": str(exc),
+                "action": action,
+            },
+        )
+        _status_error("IDC job failed: %s", exc)
+    finally:
+        _job_busy = False
+        _status_job_finished()
+        _clear_job_status_context()

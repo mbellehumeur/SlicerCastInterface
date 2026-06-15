@@ -1522,12 +1522,14 @@ class CastHub:
         event_data: Dict,
         direction: str = "received",
         publisher: Optional[Dict[str, Optional[str]]] = None,
+        message_params: Optional[Dict[str, Any]] = None,
     ):
         """Add an entry to the audit log.
 
         ``subscriber`` identifies the subscription row (delivery target for
         ``direction='sent'``, or the requester for cast-request rows).
         ``publisher`` describes who published the event (name, product).
+        ``message_params`` stores Cast wire parameters (no context payload) for admin UI.
         """
         self.audit_log_counter += 1
         log_entry: Dict[str, Any] = {
@@ -1541,6 +1543,8 @@ class CastHub:
         }
         if publisher:
             log_entry["publisher"] = publisher
+        if message_params:
+            log_entry["message_params"] = message_params
         self.audit_log.append(log_entry)
         if len(self.audit_log) > 1000:
             self.audit_log = self.audit_log[-1000:]
@@ -2009,6 +2013,16 @@ async def get_admin_snapshot(
     }
 
 
+@app.post("/api/hub/admin/clear-audit-log")
+@app.post("/api/hub/admin/clear-audit-log/")
+async def clear_audit_log():
+    """Clear message log entries only (subscriptions and conferences unchanged)."""
+    cast_hub.audit_log.clear()
+    cast_hub.audit_log_counter = 0
+    await cast_hub.send_admin_refresh_command()
+    return {"ok": True, "total_messages": 0}
+
+
 @app.post("/api/admin/reset")
 async def reset_hub(request: Request):
     """Reset the hub - clear all subscriptions, conferences, and audit log (like restarting the service)"""
@@ -2074,10 +2088,11 @@ async def post_cast_request(request: Request):
     ``event.hub.topic``. Optional ``event.context.dataType`` is forwarded on the WebSocket fan-out.
 
     Matches subscriptions by ``(topic, target.actor[, target.product.name])`` (``target.actor``
-    ``*`` or omitted = all roles on topic). Sends the client's ``hub.event`` to each connected
-    match and waits for the matching ``<datatype>-response`` events on the bind
-    WebSocket. Timeout defaults to ``CAST_REQUEST_TIMEOUT_SECONDS`` (2s); use
-    ``event.context.timeoutSeconds`` (max 300) or ``idc-claude-request`` (180s min).
+    ``*`` or omitted = all roles on topic). The requester's ``subscriber.name`` is never a
+    dispatch target. Sends the client's ``hub.event`` to each connected match and waits for the
+    matching ``<datatype>-response`` events on the bind WebSocket. Timeout defaults to
+    ``CAST_REQUEST_TIMEOUT_SECONDS`` (2s); use ``event.context.timeoutSeconds`` (max 300) or
+    ``idc-claude-request`` (180s min).
     """
     try:
         request_data = await request.json()
@@ -2096,6 +2111,9 @@ async def post_cast_request(request: Request):
     filter_actor = _target_actor_filter_from_request_body(request_data)
     requested_product_name = _target_product_name_from_payload(request_data)
     product_filter_active = _target_product_filter_active(requested_product_name)
+    request_message_params = _audit_message_params_from_cast_request(
+        request_data, request_event_name
+    )
 
     if not subscriber:
         raise HTTPException(
@@ -2136,10 +2154,13 @@ async def post_cast_request(request: Request):
 
     # Find ALL connected dispatch targets (topic, hub.events, actor[, product]) — same
     # eligibility as publish; subscriber topic ``*`` matches any request topic.
+    # The requester never receives its own request (callers already know local state).
     target_subscriptions: List[Dict] = []
     target_exists = False
     target_any_match = False  # any subscription matched the (topic, actor[, product]) filter
     for sub in cast_hub.get_subscriptions():
+        if sub.get("subscriber", "").strip() == subscriber:
+            continue
         if topic_param and not _subscription_topic_matches(
             sub.get("topic", ""), topic_param
         ):
@@ -2269,6 +2290,7 @@ async def post_cast_request(request: Request):
                 },
                 direction="sent",
                 publisher=_publisher_for_cast_request(subscriber, requested_product_name),
+                message_params=request_message_params,
             )
 
             requester_product_name = _optional_str_field(
@@ -2431,6 +2453,7 @@ async def post_cast_request(request: Request):
         },
         direction="received",
         publisher=_publisher_for_cast_request(subscriber, requested_product_name),
+        message_params=request_message_params,
     )
     if request_id:
         # Drop pending state only after the audit row is written so a response
@@ -3003,6 +3026,78 @@ def _audit_publisher_name(entry: Dict) -> str:
     return legacy
 
 
+_AUDIT_MESSAGE_PARAM_ROOT_KEYS = (
+    "id",
+    "timestamp",
+    "subscriber.name",
+    "subscriber.product.name",
+    "subscriber.actor",
+    "target.actor",
+    "target.product.name",
+    "target.subscriber.name",
+    "actor",
+)
+
+_AUDIT_CONTEXT_META_KEYS = ("dataType", "id", "level", "action")
+
+
+def _audit_event_block_from_notification_event(event: Dict) -> Dict[str, Any]:
+    event_block: Dict[str, Any] = {
+        "hub.topic": event.get("hub.topic"),
+        "hub.event": event.get("hub.event"),
+    }
+    ctx = event.get("context")
+    if isinstance(ctx, dict):
+        meta = {
+            key: ctx[key]
+            for key in _AUDIT_CONTEXT_META_KEYS
+            if key in ctx and ctx[key] is not None
+        }
+        if meta:
+            event_block["context"] = meta
+    return event_block
+
+
+def _audit_message_params_from_notification(notification: dict) -> Dict[str, Any]:
+    """Cast wire parameters for admin (no event.context payload)."""
+    params: Dict[str, Any] = {}
+    for key in _AUDIT_MESSAGE_PARAM_ROOT_KEYS:
+        if key in notification and notification[key] is not None:
+            params[key] = notification[key]
+    event = notification.get("event")
+    if isinstance(event, dict):
+        params["event"] = _audit_event_block_from_notification_event(event)
+    return params
+
+
+def _audit_message_params_from_cast_request(
+    request_data: dict, request_event_name: str
+) -> Dict[str, Any]:
+    """HTTP ``/request`` body parameters for admin (no collated response bodies)."""
+    params: Dict[str, Any] = {}
+    for key in _AUDIT_MESSAGE_PARAM_ROOT_KEYS:
+        if key in request_data and request_data[key] is not None:
+            params[key] = request_data[key]
+    topic = _request_topic_from_body(request_data)
+    data_type = _request_context_data_type(request_data, request_event_name) or ""
+    request_id = str(request_data.get("id", "")).strip()
+    if request_id and "id" not in params:
+        params["id"] = request_id
+    event_block: Dict[str, Any] = {
+        "hub.topic": topic or None,
+        "hub.event": request_event_name,
+    }
+    ctx_meta: Dict[str, Any] = {}
+    if data_type:
+        ctx_meta["dataType"] = data_type
+    if request_id:
+        ctx_meta["id"] = request_id
+    if ctx_meta:
+        event_block["context"] = ctx_meta
+    params["event"] = event_block
+    return params
+
+
 async def _handle_publish_notification(
     notification: dict,
     predecoded_binary_list: Optional[List[bytes]] = None,
@@ -3057,6 +3152,7 @@ async def _handle_publish_notification(
     audit_ctx = _audit_context()
     publisher = _publisher_from_notification(notification)
     publisher_subscriber = _publisher_name(publisher)
+    publish_message_params = _audit_message_params_from_notification(notification)
 
     cast_hub.add_audit_log(
         subscriber=publisher_subscriber or topic_name,
@@ -3065,6 +3161,7 @@ async def _handle_publish_notification(
         event_data=audit_ctx,
         direction="received",
         publisher=publisher,
+        message_params=publish_message_params,
     )
 
     # Track endpoints that have already received the message to prevent duplicates
@@ -3128,6 +3225,7 @@ async def _handle_publish_notification(
                         event_data=audit_ctx,
                         direction="sent",
                         publisher=publisher,
+                        message_params=publish_message_params,
                     )
                 except Exception as e:
                     cast_hub.log(f"WebSocket send error for {endpoint}: {type(e).__name__}: {e}")
@@ -3173,6 +3271,7 @@ async def _handle_publish_notification(
                         event_data=audit_ctx,
                         direction="sent",
                         publisher=publisher,
+                        message_params=publish_message_params,
                     )
                 except Exception as e:
                     cast_hub.log(f"WebSub delivery error to {callback}: {e}")
@@ -3218,6 +3317,7 @@ async def _handle_publish_notification(
                                     event_data=audit_ctx,
                                     direction="sent",
                                     publisher=publisher,
+                                    message_params=publish_message_params,
                                 )
                             except Exception as e:
                                 cast_hub.log(f"Conference WebSocket error: {e}")
