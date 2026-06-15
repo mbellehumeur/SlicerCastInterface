@@ -180,7 +180,7 @@ CAST_HUB_HTTP_PAYLOAD_TTL_SECONDS = _env_positive_int(
 CAST_HUB_HTTP_PAYLOAD_MAX_TOTAL_BYTES = _env_positive_int(
     "CAST_HUB_HTTP_PAYLOAD_MAX_TOTAL_BYTES", 2 * 1024 * 1024 * 1024
 )
-# Max bytes per in-memory stored chunk. Larger STOW files are split into
+# Max bytes per in-memory stored chunk. Larger binary batch files are split into
 # multiple payloadId entries on fan-out (default 4 MiB). 0 = one chunk per file.
 CAST_HUB_HTTP_PAYLOAD_STORE_CHUNK_BYTES = _env_positive_int(
     "CAST_HUB_HTTP_PAYLOAD_STORE_CHUNK_BYTES", 4 * 1024 * 1024
@@ -2516,7 +2516,7 @@ def _notification_has_embedded_resource_bytes(notification: dict) -> bool:
 
 
 def _reject_json_binary_bytes_publish(notification: dict) -> None:
-    """Binary-family publishes with file bytes must use multipart/related STOW."""
+    """Binary-family publishes with file bytes must use multipart/related binary batch."""
     event = notification.get("event") or {}
     if not is_cast_binary_event(event.get("hub.event")):
         return
@@ -2525,13 +2525,13 @@ def _reject_json_binary_bytes_publish(notification: dict) -> None:
             status_code=400,
             detail=(
                 "binary-family publish with file bytes requires "
-                "multipart/related STOW (JSON + context.files[] parts)"
+                "multipart/related binary batch (JSON + context.files[] parts)"
             ),
         )
 
 
 def _context_files_from_notification(notification: dict) -> List[dict]:
-    """Return ``context.files[]`` entries from a STOW-style batch publish."""
+    """Return ``context.files[]`` entries from a binary-batch-style batch publish."""
     event = notification.get("event") or {}
     ctx = event.get("context")
     if not isinstance(ctx, dict):
@@ -2586,17 +2586,17 @@ def _rewrite_files_with_payload_ids(
     return json.dumps(n2)
 
 
-def _prepare_stow_batch_fanout(
+def _prepare_binary_batch_fanout(
     notification: dict,
     blobs: List[bytes],
 ) -> str:
-    """Store each STOW file (split into chunks) and fan out ``payloadIds[]`` per file."""
+    """Store each binary batch file (split into chunks) and fan out ``payloadIds[]`` per file."""
     files = _context_files_from_notification(notification)
     if len(files) != len(blobs):
         raise HTTPException(
             status_code=400,
             detail=(
-                f"STOW batch: context.files length {len(files)} "
+                f"binary batch publish: context.files length {len(files)} "
                 f"does not match DICOM part count {len(blobs)}"
             ),
         )
@@ -2634,7 +2634,7 @@ def _prepare_stow_batch_fanout(
             expires_at = chunk_expires_at
             stored_chunks += 1
             cast_hub.log(
-                f"Stored STOW chunk payloadId={payload_id[:8]}... "
+                f"Stored binary batch chunk payloadId={payload_id[:8]}... "
                 f"bytes={len(chunk)} index={idx} "
                 f"chunk={chunk_idx + 1}/{len(chunks)} "
                 f"file={file_name or '(unnamed)'}"
@@ -2654,7 +2654,7 @@ def _prepare_stow_batch_fanout(
         return _rewrite_files_with_payload_ids(notification, blobs, file_registrations)
 
     cast_hub.log(
-        "STOW payload store partially unavailable "
+        "binary batch payload store partially unavailable "
         f"(stored={stored_chunks}/{total_chunks} "
         f"inflight={_http_payload_store.total_bytes()}B "
         f"cap={CAST_HUB_HTTP_PAYLOAD_MAX_TOTAL_BYTES}B), "
@@ -2669,7 +2669,7 @@ def _prepare_websocket_fanout_text(
     predecoded_binary_list: Optional[List[bytes]] = None,
 ) -> str:
     """
-    WebSocket fan-out is text-only. STOW batch publishes store each file and
+    WebSocket fan-out is text-only. binary batch publish publishes store each file and
     rewrite ``context.files[].payloadIds[]``; metadata-only binary-family events
     fan out without payload ids.
     """
@@ -2678,7 +2678,7 @@ def _prepare_websocket_fanout_text(
         return notification_json
 
     if predecoded_binary_list is not None:
-        return _prepare_stow_batch_fanout(notification, predecoded_binary_list)
+        return _prepare_binary_batch_fanout(notification, predecoded_binary_list)
 
     return _fanout_metadata_only_binary(notification)
 
@@ -2847,8 +2847,8 @@ def _parse_multipart_related_parts(
     return parts
 
 
-async def _parse_stow_batch_publish(request: Request) -> tuple:
-    """Parse STOW-shaped ``multipart/related`` batch (JSON + N file parts)."""
+async def _parse_binary_batch_publish(request: Request) -> tuple:
+    """Parse binary-batch-shaped ``multipart/related`` batch (JSON + N file parts)."""
     content_type = request.headers.get("content-type", "")
     body = await request.body()
     if not body:
@@ -2864,30 +2864,30 @@ async def _parse_stow_batch_publish(request: Request) -> tuple:
         raise HTTPException(
             status_code=400,
             detail=(
-                "STOW batch first part must be JSON "
+                "binary batch publish first part must be JSON "
                 f"(application/dicom+json); got {json_ct!r}"
             ),
         )
     if not json_bytes:
-        raise HTTPException(status_code=400, detail="STOW batch JSON part is empty")
+        raise HTTPException(status_code=400, detail="binary batch publish JSON part is empty")
     try:
         notification = json.loads(json_bytes.decode("utf-8"))
     except Exception as exc:
         raise HTTPException(
-            status_code=400, detail=f"STOW batch JSON part is not valid JSON: {exc}"
+            status_code=400, detail=f"binary batch publish JSON part is not valid JSON: {exc}"
         ) from exc
 
     if not isinstance(notification, dict):
-        raise HTTPException(status_code=400, detail="STOW batch JSON must be an object")
+        raise HTTPException(status_code=400, detail="binary batch publish JSON must be an object")
 
     event = notification.get("event")
     if not isinstance(event, dict):
-        raise HTTPException(status_code=400, detail="STOW batch JSON missing event object")
+        raise HTTPException(status_code=400, detail="binary batch publish JSON missing event object")
     if not is_cast_binary_event(event.get("hub.event")):
         raise HTTPException(
             status_code=400,
             detail=(
-                "STOW batch publish is only supported for binary-family events "
+                "binary batch publish publish is only supported for binary-family events "
                 "(hub.event starting with dicom, nifti, jpg, png, or nrrd)"
             ),
         )
@@ -2896,7 +2896,7 @@ async def _parse_stow_batch_publish(request: Request) -> tuple:
     if not files_meta:
         raise HTTPException(
             status_code=400,
-            detail="STOW batch publish requires non-empty event.context.files[]",
+            detail="binary batch publish publish requires non-empty event.context.files[]",
         )
 
     file_parts = parts[1:]
@@ -2904,7 +2904,7 @@ async def _parse_stow_batch_publish(request: Request) -> tuple:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"STOW batch expects {len(files_meta)} file part(s) after JSON, "
+                f"binary batch publish expects {len(files_meta)} file part(s) after JSON, "
                 f"got {len(file_parts)}"
             ),
         )
@@ -2918,7 +2918,7 @@ async def _parse_stow_batch_publish(request: Request) -> tuple:
     for idx, (part_ct, raw) in enumerate(file_parts):
         if not raw:
             raise HTTPException(
-                status_code=400, detail=f"STOW batch file part {idx} is empty"
+                status_code=400, detail=f"binary batch publish file part {idx} is empty"
             )
         part_ct_lower = part_ct.lower().split(";")[0].strip()
         entry = files_meta[idx]
@@ -2931,7 +2931,7 @@ async def _parse_stow_batch_publish(request: Request) -> tuple:
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    f"STOW batch file part {idx} has unsupported Content-Type "
+                    f"binary batch publish file part {idx} has unsupported Content-Type "
                     f"{part_ct!r} (expected {expected_mime or 'application/dicom'})"
                 ),
             )
@@ -2940,7 +2940,7 @@ async def _parse_stow_batch_publish(request: Request) -> tuple:
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    f"STOW batch file {idx} size {len(raw)} does not match "
+                    f"binary batch publish file {idx} size {len(raw)} does not match "
                     f"context.files[{idx}].byteLength {expected}"
                 ),
             )
@@ -3226,18 +3226,18 @@ async def _handle_publish_notification(
 
 
 async def _handle_multipart_publish(request: Request):
-    """Route multipart/related STOW batch publish."""
+    """Route multipart/related binary batch batch publish."""
     content_type = request.headers.get("content-type", "")
     ct_lower = content_type.lower()
     if "multipart/related" not in ct_lower:
         raise HTTPException(
             status_code=400,
             detail=(
-                "binary publish requires multipart/related STOW "
+                "binary publish requires multipart/related binary batch "
                 "(application/dicom+json manifest + file parts)"
             ),
         )
-    notification, blobs = await _parse_stow_batch_publish(request)
+    notification, blobs = await _parse_binary_batch_publish(request)
     return await _handle_publish_notification(
         notification,
         predecoded_binary_list=blobs,

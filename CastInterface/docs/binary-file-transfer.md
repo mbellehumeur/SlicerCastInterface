@@ -57,11 +57,11 @@ Common events:
 
 ---
 
-## Wire format: STOW batch only
+## Wire format: binary batch only
 
 All binary publishes use **one** HTTP shape. Legacy `multipart/form-data`
 (`message` + `file`) and per-message `resource.payloadId` on the wire are
-**removed**; the hub returns HTTP 400 for non-STOW multipart.
+**removed**; the hub returns HTTP 400 for non-binary-batch multipart.
 
 ### Upload: `POST /api/hub/`
 
@@ -94,7 +94,7 @@ Each entry describes one file before upload:
 - Publishers may set **`data`** in memory; the client strips it and sends bytes in
   the multipart parts only
 
-A **single** file is still a STOW batch with **`files.length === 1`**.
+A **single** file is still a binary batch with **`files.length === 1`**.
 
 ### Hub response and fan-out
 
@@ -161,11 +161,11 @@ sequenceDiagram
 **APIs:**
 
 - **`publish()`** — if any `files[].data` (or legacy `context[].resource.data`) is
-  present, coerce to `files[]` and STOW
-- **`publishStowBatch()`** / **`publish_stow_batch()`** — direct STOW when the
+  present, coerce to `files[]` and binary batch publish
+- **`publishBinaryBatch()`** / **`publish_binary_batch()`** — direct binary batch when the
   manifest is already built
 
-VolView examples: `publishDicomStowSend()` (DICOM STOW), `publishNiftiSendStudy()`
+VolView examples: `publishDicomSendForScope()` (DICOM binary batch), `publishNiftiSendStudy()`
 (NIfTI as `files[]`). Slicer providers use the same client via
 `cast_provider_runtime.build_*_publish_message()`.
 
@@ -233,9 +233,9 @@ the hub, not subscriber download time.
 
 ## DICOM send today
 
-VolView sends a study or series as **one** `dicom-send` STOW batch:
+VolView sends a study or series as **one** `dicom-send` binary batch:
 
-1. Build `context.files[]` (`build-dicom-stow-manifest.ts`).
+1. Build `context.files[]` (`build-dicom-send-manifest.ts`).
 2. Client uploads manifest + one `application/dicom` part per slice.
 3. Receivers download all chunk `payloadIds`, reassemble each file, then run segmentation or other logic.
 
@@ -245,7 +245,7 @@ VolView sends a study or series as **one** `dicom-send` STOW batch:
 
 VolView → local hub → TotalSegmentator on topic `USER-1`:
 
-1. VolView STOW-publishes 295 slices in one `dicom-send`.
+1. VolView binary-batch-publishes 295 slices in one `dicom-send`.
 2. Hub stores slices; one WS notification to `TOTAL-SEGMENTATOR`.
 3. Slicer logs `Cast payload batch start … files=295 concurrent=25`.
 4. Progress: `Download … completed=25/295 …`, then 50, 75, …
@@ -274,7 +274,7 @@ VolView → local hub → TotalSegmentator on topic `USER-1`:
 | Hub docs | `VolView/server/cast_api/README.md` |
 | Python client | `VolView/server/cast_api/cast_client.py`, `CastInterface/Lib/cast_client.py` |
 | Browser client | `vtk-js/Sources/IO/Core/CastClient/` |
-| VolView app | `VolView/src/io/cast-client.ts`, `build-dicom-stow-manifest.ts`, `build-nifti-send-context.ts` |
+| VolView app | `VolView/src/io/cast-client.ts`, `build-dicom-send-manifest.ts`, `build-nifti-send-context.ts` |
 | OHIF | `Viewers/extensions/cast/src/services/CastService/`, `Viewers/extensions/cast/src/cast/` |
 | Slicer hub loop | `CastInterface/Lib/resource_server_hub.py` |
 | Provider scripts | `CastInterface/Lib/cast_provider_runtime.py`, `Resources/scripts/` |

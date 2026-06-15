@@ -55,7 +55,7 @@ Cast uses a **notify then download** model: the WebSocket carries JSON and a
 `payloadId` per file; file bytes live in the hub’s short-lived HTTP store and 
 subscribers call `GET /api/hub/payloads/{payloadId}` to get the files.
 
-All binary uploads use **one STOW batch** per publish — `multipart/related` with
+All binary uploads use **one binary batch** per publish — `multipart/related` with
 a JSON manifest (`event.context.files[]`) plus one HTTP part per file. That
 covers DICOM slices, NIfTI volumes, and other binary-family events. 
 

@@ -75,8 +75,8 @@
         44%, 72% { stroke: #1f9d55; opacity: 1; }
         74%, 100% { stroke: #cbd5e1; opacity: 0.5; }
       }
-      .packetStowPost { opacity: 0; animation: packetStowPost 30s infinite; }
-      @keyframes packetStowPost {
+      .packetBatchPost { opacity: 0; animation: packetBatchPost 30s infinite; }
+      @keyframes packetBatchPost {
         0%, 3% { opacity: 0; transform: translate(220px, 320px); }
         5% { opacity: 1; transform: translate(220px, 320px); }
         18% { opacity: 1; transform: translate(600px, 320px); }
@@ -271,7 +271,7 @@
 
     <text x="38" y="-6" text-anchor="middle" font-family="Arial" font-size="10" font-weight="700" fill="#2457d6">3 files</text>
   </g>
-  <g class="packetStowPost">
+  <g class="packetBatchPost">
     <rect x="-92" y="-20" width="184" height="40" rx="18" fill="#2457d6"/>
     <text x="0" y="-4" text-anchor="middle" class="packetSub">HTTP POST</text>
     <text x="0" y="11" text-anchor="middle" class="packetText">multipart + files</text>

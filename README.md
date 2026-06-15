@@ -27,7 +27,7 @@ Cast is an offshoot of FHIRcast (<https://fhircast.hl7.org/>). FHIRcast is the s
 
 
 
-You can get a feeling of websocket subscription integration with the vtk-js IO module cast interface example. Open several viewers instances  and try the "Open scene views" button for cross-product multi-host display layouts in the worklist client example:
+You can experience websocket subscription integration with the vtk-js IO module cast interface example. Open several viewers instances, open a study in the worklist  and use the "Open scene views" button to view cross-product multi-host display layouts:
 [Open  worklist demo](https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/worklist-client/examples/CastClient/index.html)
 
 
@@ -40,7 +40,7 @@ Cast has a context/content sharing strategy and hub architecture that differs so
 
 ## Extension Features
 
-The extension features a hub and two cast interfaces: one for connecting existing extensions like TotalSegmentator to the hub (Resource servers) and another one to connect the Slicer viewer (Image Display client) to the hub.
+The extension features a hub and two cast interfaces: one for connecting backend agents like TotalSegmentator or IDC Claude (Resource servers) and another one to connect the Slicer viewer (Image Display client) to the hub.
 
 
 #### Hub:
@@ -55,7 +55,7 @@ It can be used without the slicer extension by running the "cast_api.py" script.
 #### Resource servers:
 
 
-Resource servers are agents that provide backend services to cast participant. This allow users to , for example, view AI results without having to send them to the archive first.
+Resource servers are agents that provide backend services to disktop integration. This allow users to ,for example, view AI results without having to send them to the archive first.
 
 The resource server tab provides a visual description of how processing resources can be connected to the hub and made available to cast workflows.
 Here for example, in the VolView client:
@@ -65,8 +65,7 @@ Here for example, in the VolView client:
 Resource servers subscribe to all user topics for status-request and dicom/nifti events. They send binary results back to the user through the hub.
 In the default example, Total Segmentator and  IDC Claude skill is used to provide the added functionality to the desktop integration. 
 
-Since these resources do not log in as a user, they need a *resource server entry* in the authorization server. This provides a client id and client secret.
-For the cast extension hub, these must be configured in the environment variables of the hub for the resource to connect successfully.
+Since these resources do not log in as a user, they need a *resource server entry* in the customer's authorization server. This provides a client id and client secret. For the cast extension hub, they must be configured in the environment variables of the hub for the resource to connect successfully.
 
 
 ![resource servers](CastInterface/docs/images/ResourceServerFeature.png)
@@ -146,11 +145,11 @@ MIT License
 **idc-index** — official [Imaging Data Commons](https://github.com/ImagingDataCommons/idc-index) Python package for local DuckDB SQL against IDC metadata and DICOM series download URLs; used by the IDC Claude resource server. If you use it in research, cite Fedorov A, et al., *Radiographics* ([2023](https://doi.org/10.1148/rg.230180)).
 
 
-**VolView** — open-source web viewer from [Kitware, Inc.](https://github.com/Kitware/VolView) Cast connects to VolView as an Image Display client for study open, scene views, and DICOM exchange.
+**VolView** — open-source web viewer from [Kitware, Inc.](https://github.com/Kitware/VolView).
 
-**OHIF** — open-source zero-footprint viewer from the [Open Health Imaging Foundation](https://ohif.org/). Cast connects to OHIF as an Image Display client with the same hub workflows.
+**OHIF** — open-source zero-footprint viewer from the [Open Health Imaging Foundation](https://ohif.org/).
 
-**3D Slicer** — open-source platform for medical image computing from the [3D Slicer community](https://www.slicer.org/). The Cast Interface extension provides Slicer Image Display and hub integration used by this worklist.
+**3D Slicer** — open-source platform for medical image computing from the [3D Slicer community](https://www.slicer.org/).
 
 ---
 

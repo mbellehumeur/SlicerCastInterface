@@ -57,7 +57,7 @@ from Lib.cast_provider_runtime import (
     record_dicom_send_received,
     record_nifti_send_received,
 )
-from Lib.cast_client import stow_files_pending_stats
+from Lib.cast_client import binary_batch_files_pending_stats
 
 _LOG_PREFIX = "TotalSegmentator"
 DEFAULT_PRODUCT_NAME = "TOTALSEG"
@@ -421,7 +421,7 @@ def _on_inbound_send(
         raw_files = (event.get("context") or {}).get("files") or []
         if isinstance(raw_files, list):
             files = raw_files
-            url_count, payload_files, chunk_count = stow_files_pending_stats(files)
+            url_count, payload_files, chunk_count = binary_batch_files_pending_stats(files)
             _debug_log(
                 "onMessage: %s download start id=%s topic=%s files=%d "
                 "url=%d payloadFiles=%d chunks=%d product=%s",
