@@ -1561,7 +1561,7 @@
                     tableHTML += `
                         <tr>
                             <td>${escapeHtml(conf.title || 'N/A')}</td>
-                            <td>${escapeHtml(conf.user || 'N/A')}</td>
+                            <td>${escapeHtml(conf.hostTopic || conf.user || 'N/A')}</td>
                             <td class="topic">${escapeHtml(topics || 'None')}</td>
                         </tr>
                     `;

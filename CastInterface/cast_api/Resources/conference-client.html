@@ -135,36 +135,6 @@
             font-size: 11px;
             color: var(--text-secondary);
         }
-        .header-actions {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex-shrink: 0;
-        }
-        .theme-toggle {
-            display: inline-flex;
-            border: 1px solid var(--border-btn);
-            border-radius: 6px;
-            overflow: hidden;
-        }
-        .theme-toggle button {
-            margin: 0;
-            padding: 6px 12px;
-            border: none;
-            border-radius: 0;
-            background: var(--bg-btn);
-            color: var(--text-secondary);
-            font-size: 12px;
-            cursor: pointer;
-        }
-        .theme-toggle button:hover {
-            background: var(--bg-btn-hover);
-            color: var(--text-primary);
-        }
-        .theme-toggle button.active {
-            background: var(--bg-btn-primary);
-            color: var(--text-on-primary);
-        }
         .context-bar {
             display: flex;
             flex-wrap: wrap;
@@ -396,14 +366,8 @@
             const theme =
                 t === '3dslicer' || t === 'slicer' ? '3dslicer' : 'volview';
             document.documentElement.dataset.theme = theme;
-            const MODE_KEY = 'castConferenceColorMode';
-            const saved = localStorage.getItem(MODE_KEY);
-            let mode = 'dark';
-            if (saved === 'light' || saved === 'dark') {
-                mode = saved;
-            } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
-                mode = 'light';
-            }
+            const modeParam = (p.get('mode') || '').toLowerCase();
+            const mode = modeParam === 'light' ? 'light' : 'dark';
             document.documentElement.dataset.mode = mode;
             const isSlicer = theme === '3dslicer';
             document.title = isSlicer ? '3D Slicer Conferencing' : 'Conferencing';
@@ -417,22 +381,6 @@
                     favicon.type = 'image/svg+xml';
                 }
             }
-            window.applyConferenceColorMode = function (nextMode) {
-                const m = nextMode === 'light' ? 'light' : 'dark';
-                document.documentElement.dataset.mode = m;
-                localStorage.setItem(MODE_KEY, m);
-                const lightBtn = document.getElementById('themeLightBtn');
-                const darkBtn = document.getElementById('themeDarkBtn');
-                if (lightBtn) {
-                    lightBtn.classList.toggle('active', m === 'light');
-                }
-                if (darkBtn) {
-                    darkBtn.classList.toggle('active', m === 'dark');
-                }
-            };
-            document.addEventListener('DOMContentLoaded', function () {
-                window.applyConferenceColorMode(mode);
-            });
         })();
     </script>
 </head>
@@ -442,17 +390,8 @@
             <header class="page-header">
                 <div class="page-header-brand">
                     <h1>Conferencing</h1>
-                    <p class="subtitle">Multi-participant hub sessions</p>
-                </div>
-                <div class="header-actions">
-                    <div class="theme-toggle" role="group" aria-label="Color mode">
-                        <button type="button" id="themeLightBtn" onclick="applyConferenceColorMode('light')">Light</button>
-                        <button type="button" id="themeDarkBtn" onclick="applyConferenceColorMode('dark')">Dark</button>
-                    </div>
                 </div>
             </header>
-
-            <div id="contextBar" class="context-bar" hidden></div>
 
             <div id="statusMessage"></div>
 
@@ -492,11 +431,11 @@
                     <h2>Manage conference</h2>
                     <div id="conferenceInfo" class="info-box">
                         <p><strong>Title:</strong> <span id="conferenceTitleDisplay">—</span></p>
-                        <p><strong>Host:</strong> <span id="conferenceUserDisplay">—</span></p>
+                        <p><strong>Host topic:</strong> <span id="conferenceHostDisplay">—</span></p>
                         <p><strong>Users:</strong> <span id="conferenceTopicsDisplay">—</span></p>
                     </div>
                     <div class="btn-row">
-                        <button type="button" id="exitConferenceButton" class="primary" onclick="exitConference()">Exit conference</button>
+                        <button type="button" id="exitConferenceButton" class="primary" onclick="exitConference()">Leave conference</button>
                     </div>
                 </div>
             </div>
@@ -522,36 +461,44 @@
         let allTopics = [];
         let currentConference = null;
 
+        function conferenceHostTopic(conf) {
+            if (!conf) {
+                return '';
+            }
+            return String(conf.hostTopic || conf.user || '').trim();
+        }
+
+        function isConferenceHost(conf) {
+            const hostTopic = conferenceHostTopic(conf);
+            return Boolean(
+                topicName &&
+                    hostTopic &&
+                    (topicName === hostTopic ||
+                        topicName.toLowerCase() === hostTopic.toLowerCase())
+            );
+        }
+
+        function isConferenceParticipant(conf) {
+            if (!conf) {
+                return false;
+            }
+            const hostTopic = conferenceHostTopic(conf);
+            const topics = Array.isArray(conf.topics) ? conf.topics : [conf.topics];
+            if (
+                topicName &&
+                topics.some(
+                    (t) => t === topicName || t.toLowerCase() === topicName.toLowerCase()
+                )
+            ) {
+                return true;
+            }
+            return isConferenceHost(conf);
+        }
+
         function getUrlParams() {
             const urlParams = new URLSearchParams(window.location.search);
             subscriberName = urlParams.get('subscriberName') || urlParams.get('user');
             topicName = urlParams.get('topic');
-            renderContextBar();
-        }
-
-        function renderContextBar() {
-            const bar = document.getElementById('contextBar');
-            if (!bar) {
-                return;
-            }
-            if (!subscriberName) {
-                bar.className = 'context-bar warn';
-                bar.hidden = false;
-                bar.innerHTML =
-                    '<span><strong>Subscriber not set.</strong> Open this page from a client ' +
-                    '(<em>Conferencing</em> menu) or add <code>?subscriberName=…&amp;topic=…</code> to the URL.</span>';
-                return;
-            }
-            bar.className = 'context-bar';
-            bar.hidden = false;
-            const topicPart = topicName
-                ? '<span><strong>User:</strong> ' + escapeHtml(topicName) + '</span>'
-                : '<span class="muted">No user in URL</span>';
-            bar.innerHTML =
-                '<span><strong>Subscriber:</strong> ' +
-                escapeHtml(subscriberName) +
-                '</span>' +
-                topicPart;
         }
 
         async function loadTopics() {
@@ -635,6 +582,12 @@
                 return;
             }
 
+            if (!topicName) {
+                statusDiv.innerHTML =
+                    '<div class="status error">Hub topic must be provided in URL parameters (e.g. ?topic=USER-1)</div>';
+                return;
+            }
+
             if (!title) {
                 statusDiv.innerHTML =
                     '<div class="status error">Conference title is required</div>';
@@ -669,7 +622,7 @@
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        user: subscriberName,
+                        hostTopic: topicName,
                         title: title,
                         topics: selectedTopics,
                     }),
@@ -702,18 +655,12 @@
         }
 
         function checkTopicInConference(conferences) {
-            if (!topicName || !conferences) {
+            if (!conferences) {
                 return null;
             }
 
             for (const conf of conferences) {
-                const topics = Array.isArray(conf.topics) ? conf.topics : [conf.topics];
-                if (
-                    topics.some(
-                        (t) =>
-                            t === topicName || t.toLowerCase() === topicName.toLowerCase()
-                    )
-                ) {
+                if (isConferenceParticipant(conf)) {
                     return conf;
                 }
             }
@@ -725,6 +672,7 @@
             const createSection = document.getElementById('createConferenceSection');
             const manageSection = document.getElementById('manageConferenceSection');
             const activeSection = document.getElementById('activeConferencesSection');
+            const exitButton = document.getElementById('exitConferenceButton');
 
             if (currentConference) {
                 createSection.style.display = 'none';
@@ -738,15 +686,23 @@
                     : currentConference.topics;
                 document.getElementById('conferenceTitleDisplay').textContent =
                     currentConference.title || 'N/A';
-                document.getElementById('conferenceUserDisplay').textContent =
-                    currentConference.user || 'N/A';
+                document.getElementById('conferenceHostDisplay').textContent =
+                    conferenceHostTopic(currentConference) || 'N/A';
                 document.getElementById('conferenceTopicsDisplay').textContent =
                     topics || 'None';
+                if (exitButton) {
+                    exitButton.textContent = isConferenceHost(currentConference)
+                        ? 'End conference'
+                        : 'Leave conference';
+                }
             } else {
                 createSection.style.display = 'block';
                 manageSection.style.display = 'none';
                 if (activeSection) {
                     activeSection.style.display = '';
+                }
+                if (exitButton) {
+                    exitButton.textContent = 'Leave conference';
                 }
             }
         }
@@ -777,7 +733,7 @@
                             '<tr><td>' +
                             escapeHtml(conf.title || 'N/A') +
                             '</td><td>' +
-                            escapeHtml(conf.user || 'N/A') +
+                            escapeHtml(conferenceHostTopic(conf) || 'N/A') +
                             '</td><td class="topic">' +
                             escapeHtml(topics || 'None') +
                             '</td></tr>';
@@ -799,21 +755,24 @@
         }
 
         async function exitConference() {
-            if (!currentConference || !subscriberName) {
-                alert('Cannot exit conference: missing information');
+            if (!currentConference || !topicName) {
+                alert('Cannot leave conference: missing topic information');
                 return;
             }
 
             const statusDiv = document.getElementById('statusMessage');
             const exitButton = document.getElementById('exitConferenceButton');
-
-            if (!confirm('Are you sure you want to exit this conference?')) {
-                return;
-            }
+            const hostTopic = conferenceHostTopic(currentConference);
+            const hostAction = isConferenceHost(currentConference);
 
             exitButton.disabled = true;
-            exitButton.textContent = 'Exiting…';
+            exitButton.textContent = hostAction ? 'Ending…' : 'Leaving…';
             statusDiv.innerHTML = '';
+
+            const body = { hostTopic: hostTopic };
+            if (!hostAction) {
+                body.leaveTopic = topicName;
+            }
 
             try {
                 const response = await fetch(CONFERENCE_API, {
@@ -821,32 +780,38 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({
-                        user: currentConference.user,
-                    }),
+                    body: JSON.stringify(body),
                 });
 
                 if (response.ok) {
                     statusDiv.innerHTML =
-                        '<div class="status success">Successfully exited conference.</div>';
+                        '<div class="status success">' +
+                        (hostAction ? 'Conference ended.' : 'Left conference.') +
+                        '</div>';
                     await loadConferences();
                     await loadTopics();
+                    if (window.opener) {
+                        setTimeout(() => window.close(), 1200);
+                        return;
+                    }
                     setTimeout(() => {
                         statusDiv.innerHTML = '';
-                    }, 3000);
+                    }, 1200);
                 } else {
                     const errorText = await response.text();
                     throw new Error(
-                        'Failed to exit conference: ' + response.status + ' - ' + errorText
+                        'Failed to update conference: ' + response.status + ' - ' + errorText
                     );
                 }
             } catch (error) {
-                console.error('Error exiting conference:', error);
+                console.error('Error leaving conference:', error);
                 statusDiv.innerHTML =
                     '<div class="status error">Error: ' + escapeHtml(error.message) + '</div>';
             } finally {
                 exitButton.disabled = false;
-                exitButton.textContent = 'Exit conference';
+                exitButton.textContent = hostAction
+                    ? 'End conference'
+                    : 'Leave conference';
             }
         }
 

@@ -1736,6 +1736,83 @@ async def get_hub_sample_file(study_id: str, file_name: str):
     return FileResponse(file_path, media_type=media_type)
 
 
+def _conference_host_topic(conf: Dict) -> str:
+    """Host hub topic; legacy records may use ``user``."""
+    return str(conf.get("hostTopic") or conf.get("user") or "").strip()
+
+
+def _normalize_conference_topics(raw) -> List[str]:
+    if not isinstance(raw, list):
+        return []
+    seen = set()
+    out: List[str] = []
+    for entry in raw:
+        topic = str(entry).strip()
+        if topic and topic != "*" and topic not in seen:
+            seen.add(topic)
+            out.append(topic)
+    return out
+
+
+def _conference_participant_topics(conf: Dict) -> List[str]:
+    host_topic = _conference_host_topic(conf)
+    attendee_topics = _normalize_conference_topics(conf.get("topics", []))
+    if not host_topic:
+        return attendee_topics
+    return [host_topic] + [t for t in attendee_topics if t != host_topic]
+
+
+def _conference_participant_subscribers(conf: Dict) -> List[str]:
+    subscriber_names: List[str] = []
+    for participant_topic in _conference_participant_topics(conf):
+        for sub in cast_hub.subscriptions:
+            if sub.get("topic") == participant_topic and sub.get("channel") == "websocket":
+                name = str(sub.get("subscriber") or "unknown").strip()
+                if name and name not in subscriber_names:
+                    subscriber_names.append(name)
+                break
+    return subscriber_names
+
+
+async def _send_conference_hub_event(
+    event_name: str,
+    host_topic: str,
+    participant_topics: List[str],
+    context: Dict,
+) -> None:
+    notification = {
+        "timestamp": datetime.now().isoformat(),
+        "id": str(uuid.uuid4()),
+        "event": {
+            "hub.topic": host_topic or "",
+            "hub.event": event_name,
+            "context": context,
+        },
+    }
+    message_json = json.dumps(notification)
+    sent_endpoints = set()
+    for participant_topic in participant_topics:
+        for sub in cast_hub.subscriptions:
+            if sub.get("topic") != participant_topic or sub.get("channel") != "websocket":
+                continue
+            endpoint = sub.get("websocket_endpoint")
+            if (
+                not endpoint
+                or endpoint not in cast_hub.websocket_connections
+                or endpoint in sent_endpoints
+            ):
+                continue
+            try:
+                ws = cast_hub.websocket_connections[endpoint]
+                await ws.send_text(message_json)
+                sent_endpoints.add(endpoint)
+                cast_hub.log(
+                    f"Sent {event_name} to participant: {sub.get('subscriber')}"
+                )
+            except Exception as e:
+                cast_hub.log(f"{event_name} WebSocket error: {e}")
+
+
 @app.get("/api/hub/conference-topics")
 @app.get("/api/hub/conference-topics/")
 async def get_conference_topics():
@@ -1755,7 +1832,10 @@ async def get_conference_topics():
 @app.get("/api/hub/conference")
 async def get_conference():
     """Get all conferences"""
-    return cast_hub.conferences
+    return [
+        {**conf, "participants": _conference_participant_subscribers(conf)}
+        for conf in cast_hub.conferences
+    ]
 
 
 @app.post("/api/hub/conference")
@@ -1765,83 +1845,109 @@ async def post_conference(request: Request):
         data = await _parse_request_body(request)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not parse request: {e}")
-    
+
+    host_topic = str(data.get("hostTopic") or data.get("user") or "").strip()
+    title = str(data.get("title") or "").strip()
+    attendee_topics = _normalize_conference_topics(data.get("topics", []))
+    attendee_topics = [t for t in attendee_topics if t != host_topic]
+
+    if not host_topic:
+        raise HTTPException(status_code=400, detail="hostTopic is required")
+    if not title:
+        raise HTTPException(status_code=400, detail="title is required")
+
     conference = {
-        "user": data.get("user"),
-        "title": data.get("title"),
-        "topics": data.get("topics", [])
+        "hostTopic": host_topic,
+        "title": title,
+        "topics": attendee_topics,
     }
     cast_hub.conferences.append(conference)
-    cast_hub.log(f"Conference created: {conference.get('title')}")
+    cast_hub.log(f"Conference created: {conference.get('title')} host={host_topic}")
 
-    # Send conference-start to all participants' WebSockets (title + subscriber names)
-    conference_user = conference.get("user")
-    attendee_topics = conference.get("topics", [])
-    all_participant_topics = [conference_user] + attendee_topics
-    subscriber_names = []
-    sent_endpoints = set()
-    for participant_topic in all_participant_topics:
-        for sub in cast_hub.subscriptions:
-            if sub.get("topic") == participant_topic and sub.get("channel") == "websocket":
-                name = sub.get("subscriber", "unknown")
-                if name not in subscriber_names:
-                    subscriber_names.append(name)
-                break
-    # Cast-style message: timestamp, id, event with hub.topic, hub.event, context
-    notification = {
-        "timestamp": datetime.now().isoformat(),
-        "id": str(uuid.uuid4()),
-        "event": {
-            "hub.topic": conference_user or "",
-            "hub.event": "conference-start",
-            "context": {
-                "title": conference.get("title") or "",
-                "participants": subscriber_names,
-            },
+    all_participant_topics = _conference_participant_topics(conference)
+    subscriber_names = _conference_participant_subscribers(conference)
+
+    await _send_conference_hub_event(
+        "conference-start",
+        host_topic,
+        all_participant_topics,
+        {
+            "title": title,
+            "hostTopic": host_topic,
+            "participants": subscriber_names,
         },
-    }
-    message_json = json.dumps(notification)
-    for participant_topic in all_participant_topics:
-        for sub in cast_hub.subscriptions:
-            if sub.get("topic") == participant_topic and sub.get("channel") == "websocket":
-                endpoint = sub.get("websocket_endpoint")
-                if endpoint and endpoint in cast_hub.websocket_connections and endpoint not in sent_endpoints:
-                    try:
-                        ws = cast_hub.websocket_connections[endpoint]
-                        await ws.send_text(message_json)
-                        sent_endpoints.add(endpoint)
-                        cast_hub.log(f"Sent conference-start to participant: {sub.get('subscriber')}")
-                    except Exception as e:
-                        cast_hub.log(f"Conference-start WebSocket error: {e}")
+    )
 
     # Send admin refresh command (rate limited)
     await cast_hub.send_admin_refresh_command()
-    
-    return {"status": "created"}
+
+    return {"status": "created", "conference": conference}
 
 
 @app.delete("/api/hub/conference")
 async def delete_conference(request: Request):
-    """Delete a conference"""
+    """End a conference (host) or remove one attendee topic (leave)."""
     try:
         data = await _parse_request_body(request)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Could not parse request: {e}")
-    
-    user = data.get("user")
+
+    host_topic = str(data.get("hostTopic") or data.get("user") or "").strip()
+    leave_topic = str(data.get("leaveTopic") or "").strip()
+
+    if not host_topic:
+        raise HTTPException(status_code=400, detail="hostTopic is required")
+
     removed = []
+    updated = []
     for conf in cast_hub.conferences[:]:
-        if conf.get("user") == user:
-            cast_hub.conferences.remove(conf)
-            removed.append(conf)
-        elif user in conf.get("topics", []):
-            cast_hub.log(f"User {user} exited conference {conf.get('title')}")
-    
-    # Send admin refresh command if conferences were removed (rate limited)
-    if len(removed) > 0:
+        if _conference_host_topic(conf) != host_topic:
+            continue
+
+        conf_title = str(conf.get("title") or "").strip()
+
+        if leave_topic:
+            topics = _normalize_conference_topics(conf.get("topics", []))
+            if leave_topic not in topics:
+                break
+            conf["topics"] = [t for t in topics if t != leave_topic]
+            updated.append(conf)
+            cast_hub.log(
+                f"Attendee {leave_topic} left conference {conf_title or host_topic}"
+            )
+            await _send_conference_hub_event(
+                "conference-end",
+                host_topic,
+                [leave_topic],
+                {
+                    "title": conf_title,
+                    "hostTopic": host_topic,
+                    "reason": "attendee-left",
+                    "leaveTopic": leave_topic,
+                },
+            )
+            break
+
+        all_participant_topics = _conference_participant_topics(conf)
+        cast_hub.conferences.remove(conf)
+        removed.append(conf)
+        cast_hub.log(f"Conference ended: {conf_title or host_topic}")
+        await _send_conference_hub_event(
+            "conference-end",
+            host_topic,
+            all_participant_topics,
+            {
+                "title": conf_title,
+                "hostTopic": host_topic,
+                "reason": "host-ended",
+            },
+        )
+        break
+
+    if len(removed) > 0 or len(updated) > 0:
         await cast_hub.send_admin_refresh_command()
-    
-    return {"removed": len(removed)}
+
+    return {"removed": len(removed), "updated": len(updated)}
 
 
 @app.get("/api/hub/conference-client")
@@ -3073,15 +3179,15 @@ async def _handle_publish_notification(
     
     # Handle conferences - broadcast to attendees (skip if already sent)
     for conference in cast_hub.conferences:
-        conference_user = conference.get("user")
-        attendee_topics = conference.get("topics", [])
-        
+        conference_host = _conference_host_topic(conference)
+        attendee_topics = _normalize_conference_topics(conference.get("topics", []))
+
         # Check if message is from any conference participant (host or attendee)
-        is_participant = (conference_user == topic_name) or (topic_name in attendee_topics)
-        
+        is_participant = (conference_host == topic_name) or (topic_name in attendee_topics)
+
         if is_participant:
             # Send to all participants (host + all attendees)
-            all_participants = [conference_user] + attendee_topics
+            all_participants = _conference_participant_topics(conference)
             
             for participant_topic in all_participants:
                 # Find subscriptions for participant
