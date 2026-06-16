@@ -138,7 +138,6 @@ Since the resource servers are not on the internet, you will get shared keys for
 
 ## License
 
-Copyright (c) 2026 Martin Bellehumeur, M. Eng.
 
 Cast Interface is distributed under the [MIT License](LICENSE).
 
