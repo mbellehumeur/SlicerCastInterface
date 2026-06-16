@@ -27,8 +27,8 @@ Cast is an offshoot of FHIRcast (<https://fhircast.hl7.org/>). FHIRcast is the s
 
 
 
-You can test websocket subscription integration with the vtk-js IO module cast interface example. Open several viewers instances, open a study in the worklist  and use the "Open scene views" button to view cross-product multi-host display layouts:
-[Open  worklist demo](https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/worklist-client/examples/CastClient/index.html)
+You can test websocket subscription integration with the vtk-js IO module cast interface example. Open several viewer instances, open a study in the worklist and use the "Open scene views" button to view cross-product multi-host display layouts:
+[Open worklist demo](https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/worklist-client/examples/CastClient/index.html)
 
 
 [![Cast worklist client](CastInterface/docs/images/worklist-client.png)](https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/worklist-client/examples/CastClient.html)
@@ -38,12 +38,12 @@ The worklist example demonstrates:
 - **IDC Claude** — Build a personal IDC study worklist from natural-language queries; Claude and the idc-index run as a hub-connected resource server.
 - **OHIF** — Open OHIF viewer instances that stay in sync with the worklist.
 - **VolView** — Open VolView instances that stay in sync with the worklist.
-- **VSlim** — Open Slim instances that stay in sync with the worklist.
+- **Slim** — Open Slim instances that stay in sync with the worklist.
 - **Scene view** — Show each connected image display’s layout (including 3D slicer on same or remote hosts).
-- **Total Segmentator** — From OHIF or VolView, send an MR or CT study to TotalSegmentator and receive segmentation results (SEG or RTSTRUCT).  Total segmentator is connected to the hub as a resource server.
+- **Total Segmentator** — From OHIF or VolView, send an MR or CT study to TotalSegmentator and receive segmentation results (SEG or RTSTRUCT). Total segmentator is connected to the hub as a resource server.
 
 
-Cast has a context/content sharing strategy and hub architecture that differs somewhat to FHIRcast, see description [here](CastInterface/docs/cast-description.md).
+Cast has a context/content sharing strategy and hub architecture that differs somewhat from FHIRcast, see description [here](CastInterface/docs/cast-description.md).
 
 
 
@@ -64,7 +64,7 @@ It can be used without the slicer extension by running the "cast_api.py" script.
 #### Resource servers:
 
 
-Resource servers are agents that provide backend services to disktop integration. This allow users to ,for example, view AI results without having to send them to the archive first.
+Resource servers are agents that provide backend services to desktop integration. This allows users to, for example, view AI results without having to send them to the archive first.
 
 The resource server tab provides a visual description of how processing resources can be connected to the hub and made available to cast workflows.
 Here for example, in the VolView client:
@@ -72,7 +72,7 @@ Here for example, in the VolView client:
 
 
 Resource servers subscribe to all user topics for status-request and dicom/nifti events. They send binary results back to the user through the hub.
-In the default example, Total Segmentator and  IDC Claude skill is used to provide the added functionality to the desktop integration. 
+In the default example, Total Segmentator and IDC Claude skill is used to provide the added functionality to the desktop integration. 
 
 Since these resources do not log in as a user, they need a *resource server entry* in the customer's authorization server. This provides a client id and client secret. For the cast extension hub, they must be configured in the environment variables of the hub for the resource to connect successfully.
 
@@ -98,7 +98,7 @@ The image display client provides a PACS client type interface to the 3D Slicer 
 ### Simplified, secure deployment of medical imaging services
 
 
-This architecture protects resource servers by eliminating direct inbound internet exposure entirely. No hostname is required and no changes to the networking environment are needed.  No VPN or proxy to configure.
+This architecture protects resource servers by eliminating direct inbound internet exposure entirely. No hostname is required and no changes to the networking environment are needed. No VPN or proxy to configure.
 
 
 Each resource server establishes only outbound encrypted connections to the hub, which functions exclusively as a routing appliance. Because no inbound ports need to be opened on hospital or enterprise networks, the resource servers remain protected behind existing firewalls and are never directly reachable from the public internet.
@@ -121,7 +121,7 @@ For high availability deployment a hot standby configuration can be used. The "r
 The hub provides a test mock auth endpoint that assigns a user when none is provided. For public web applications that do not need user authentication but want to use the resource servers, the mock endpoints provide the required functionality.
 
 
-Since the resource servers are not on the internet, you will get shared keys for the auth server.  The hub can use domain name certificates.
+Since the resource servers are not on the internet, you will get shared keys for the auth server. The hub can use domain name certificates.
 
 
 ## Installation
