@@ -16,6 +16,8 @@ samples/
   TestPattern/
     study.json
     TG18-CT-1k-01.dcm
+    TG18-LN-1k-09.dcm
+    TG18-LN-1k-18.dcm
 ```
 
 `study.json`:
@@ -24,20 +26,30 @@ samples/
 {
   "id": "TestPattern",
   "name": "Test Pattern",
-  "description": "TG-18 Luminance test pattern",
+  "description": "TG-18 contrast and luminance test patterns",
   "openMode": "dicom-url",
-  "size": "1 MB",
+  "size": "6 MB",
   "files": [
     {
       "fileName": "TG18-CT-1k-01.dcm",
       "mimeType": "application/dicom",
-      "label": "Test Pattern"
+      "label": "TG-18 Contrast (CT)"
+    },
+    {
+      "fileName": "TG18-LN-1k-09.dcm",
+      "mimeType": "application/dicom",
+      "label": "TG-18 Luminance 09 (LN)"
+    },
+    {
+      "fileName": "TG18-LN-1k-18.dcm",
+      "mimeType": "application/dicom",
+      "label": "TG-18 Luminance 18 (LN)"
     }
   ]
 }
 ```
 
-For a zip of DICOM instances (e.g. `MRBrain/MRBrainFreeSurfer.zip`), set
+For a zip of DICOM instances (e.g. `MyStudy/series.zip`), set
 `"openMode": "dicom-url"` so VolView and OHIF expand the archive and ingest
 DICOM rather than treating the zip as a generic volume file.
 
