@@ -323,6 +323,9 @@
             align-items: flex-start;
             gap: 6px;
         }
+        .hub-cast-radio-wrap {
+            position: relative;
+        }
         .hub-cast-radio {
             display: inline-flex;
             align-items: center;
@@ -330,7 +333,49 @@
             width: 36px;
             height: 36px;
             color: var(--text-secondary);
-            cursor: default;
+        }
+        .hub-cast-radio-btn {
+            padding: 0;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            background: transparent;
+            cursor: pointer;
+        }
+        .hub-cast-radio-btn:hover,
+        .hub-cast-radio-btn[aria-expanded='true'] {
+            background: var(--bg-muted-hover);
+            border-color: var(--border);
+            color: var(--text-primary);
+        }
+        .hub-cast-menu {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            min-width: 180px;
+            padding: 6px 0;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: var(--shadow-modal);
+            z-index: 1100;
+        }
+        .hub-cast-menu[hidden] {
+            display: none;
+        }
+        .hub-cast-menu-item {
+            display: block;
+            width: 100%;
+            padding: 8px 14px;
+            border: 0;
+            background: transparent;
+            color: var(--text-primary);
+            font-size: 14px;
+            text-align: left;
+            cursor: pointer;
+        }
+        .hub-cast-menu-item:hover,
+        .hub-cast-menu-item:focus-visible {
+            background: var(--bg-muted-hover);
         }
         .hub-cast-radio-icon {
             position: relative;
@@ -903,10 +948,21 @@
             gap: 10px;
             justify-content: flex-end;
         }
+        .modal-dialog .modal-actions.modal-actions-about {
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+        }
         .modal-dialog .modal-actions button {
             padding: 8px 16px;
             border-radius: 4px;
             cursor: pointer;
+        }
+        .modal-dialog .btn-sm {
+            padding: 5px 10px;
+            font-size: 12px;
         }
         .modal-dialog .btn-cancel {
             background-color: var(--bg-btn);
@@ -918,38 +974,54 @@
             color: var(--text-on-primary);
             border: 1px solid var(--danger-border);
         }
-        .about-dialog .about-meta {
-            font-size: 14px;
-            color: var(--text-secondary);
-            margin-bottom: 8px;
+        .modal-dialog.about-dialog {
+            min-width: 400px;
+            max-width: 560px;
+            max-height: 85vh;
+            overflow-y: auto;
         }
-        .about-dialog .about-links {
-            margin: 16px 0 0;
+        .about-dialog .about-banner-wrap {
+            margin: -30px -30px 16px;
+            overflow: hidden;
+            border-radius: 8px 8px 0 0;
         }
-        .about-dialog .about-links button {
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            background-color: var(--bg-btn);
-            color: var(--text-primary);
-            border: 1px solid var(--border-btn);
-        }
-        .about-dialog .about-links button:hover {
-            background-color: var(--bg-btn-hover);
-        }
-        .about-danger-zone {
-            margin-top: 24px;
-            padding-top: 16px;
-            border-top: 1px solid var(--border);
-        }
-        .about-danger-zone p {
-            font-size: 13px;
-            color: var(--text-secondary);
-            margin-bottom: 12px;
-        }
-        .about-danger-zone .btn-confirm-reset {
+        .about-dialog .about-banner {
+            display: block;
             width: 100%;
-            padding: 10px 16px;
+            height: auto;
+        }
+        .about-dialog .about-header-text h3 {
+            margin: 0;
+        }
+        .about-dialog .about-body {
+            font-size: 14px;
+            line-height: 1.5;
+            margin: 0 0 12px;
+        }
+        .about-dialog .about-body a {
+            color: var(--accent);
+        }
+        .about-dialog .about-disclaimer {
+            margin-top: 16px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+            font-size: 11px;
+            line-height: 1.45;
+            color: var(--text-secondary);
+        }
+        .about-dialog .about-disclaimer h4 {
+            font-size: 12px;
+            margin: 16px 0 8px;
+            color: var(--text-primary);
+        }
+        .about-dialog .about-disclaimer h4:first-child {
+            margin-top: 0;
+        }
+        .about-dialog .about-disclaimer p {
+            margin: 0 0 8px;
+        }
+        .about-dialog .about-disclaimer p:last-child {
+            margin-bottom: 0;
         }
     </style>
     <script>
@@ -961,13 +1033,58 @@
             document.documentElement.dataset.theme = theme;
             const COLOR_MODE_KEY = 'castHubAdminColorMode';
             const savedMode = localStorage.getItem(COLOR_MODE_KEY);
-            const COLOR_MODES = ['light', 'dark', 'polka-dots'];
-            const mode = COLOR_MODES.includes(savedMode) ? savedMode : 'dark';
-            document.documentElement.dataset.mode = mode;
+            const PERSISTED_COLOR_MODES = ['light', 'dark'];
+            let baseMode = PERSISTED_COLOR_MODES.includes(savedMode) ? savedMode : 'dark';
+            if (savedMode === 'polka-dots') {
+                localStorage.setItem(COLOR_MODE_KEY, baseMode);
+            }
+            let shiftPolkaActive = false;
+            document.documentElement.dataset.mode = baseMode;
+
+            function setDisplayMode(displayMode) {
+                document.documentElement.dataset.mode = displayMode;
+            }
+
+            function applyColorMode(nextMode) {
+                baseMode = PERSISTED_COLOR_MODES.includes(nextMode) ? nextMode : 'dark';
+                if (!shiftPolkaActive) {
+                    setDisplayMode(baseMode);
+                }
+                localStorage.setItem(COLOR_MODE_KEY, baseMode);
+            }
+
+            function activateShiftPolka() {
+                if (shiftPolkaActive) {
+                    return;
+                }
+                shiftPolkaActive = true;
+                setDisplayMode('polka-dots');
+            }
+
+            function deactivateShiftPolka() {
+                if (!shiftPolkaActive) {
+                    return;
+                }
+                shiftPolkaActive = false;
+                setDisplayMode(baseMode);
+            }
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Shift' && !e.repeat) {
+                    activateShiftPolka();
+                }
+            });
+            document.addEventListener('keyup', (e) => {
+                if (e.key === 'Shift') {
+                    deactivateShiftPolka();
+                }
+            });
+            window.addEventListener('blur', deactivateShiftPolka);
             const isSlicer = theme === '3dslicer';
             const HUB_PRODUCT_NAME = isSlicer
                 ? '3D Slicer Cast Hub'
                 : 'Server Cast API';
+            const CAST_HEADER_LABEL = 'Cast Interface';
             document.title = isSlicer
                 ? '3D Slicer Cast Hub'
                 : 'VolView Server Cast API';
@@ -986,22 +1103,16 @@
                 if (titleEl) {
                     titleEl.textContent = HUB_PRODUCT_NAME;
                 }
-                const radioEl = document.getElementById('hubCastRadio');
+                const radioEl = document.getElementById('hubCastRadioBtn');
                 if (radioEl) {
                     radioEl.setAttribute('data-hub-product-name', HUB_PRODUCT_NAME);
                 }
                 const colorSelect = document.getElementById('colorModeSelect');
                 if (colorSelect) {
-                    colorSelect.value = mode;
+                    colorSelect.value = baseMode;
                 }
                 initHubSettingsMenu();
             });
-
-            function applyColorMode(nextMode) {
-                const m = COLOR_MODES.includes(nextMode) ? nextMode : 'dark';
-                document.documentElement.dataset.mode = m;
-                localStorage.setItem(COLOR_MODE_KEY, m);
-            }
 
             function initHubSettingsMenu() {
                 const toggle = document.getElementById('hubSettingsToggle');
@@ -1015,6 +1126,9 @@
                     toggle.setAttribute('aria-expanded', 'false');
                 };
                 const openPanel = () => {
+                    if (typeof closeHubCastRadioMenu === 'function') {
+                        closeHubCastRadioMenu();
+                    }
                     panel.hidden = false;
                     toggle.setAttribute('aria-expanded', 'true');
                 };
@@ -1089,11 +1203,15 @@
                 <span id="singleUserBadge" class="single-user-badge" style="display:none;" title="Token endpoint returns SINGLE-USER in this mode">Single-user mode</span>
                 <div class="hub-settings">
                     <div class="hub-settings-header">
-                        <span
-                            id="hubCastRadio"
-                            class="hub-cast-radio hub-cast-radio--connecting"
-                            role="img"
-                            aria-label="Cast hub"
+                        <div class="hub-cast-radio-wrap">
+                        <button
+                            type="button"
+                            id="hubCastRadioBtn"
+                            class="hub-cast-radio hub-cast-radio-btn hub-cast-radio--connecting"
+                            aria-label="Cast Interface"
+                            aria-haspopup="menu"
+                            aria-expanded="false"
+                            title="Cast Interface"
                         >
                             <span class="hub-cast-radio-icon">
                                 <svg class="hub-cast-radio-svg" width="20" height="20" viewBox="0 0 24 24"
@@ -1107,7 +1225,11 @@
                                 </svg>
                                 <span id="hubCastRadioSlash" class="hub-cast-radio-slash" aria-hidden="true" hidden></span>
                             </span>
-                        </span>
+                        </button>
+                        <div id="hubCastRadioMenu" class="hub-cast-menu" role="menu" hidden>
+                            <button type="button" id="hubCastRadioSessionInfo" class="hub-cast-menu-item" role="menuitem">Session info</button>
+                        </div>
+                        </div>
                         <div class="hub-settings-stack">
                         <button type="button" class="hub-settings-toggle" id="hubSettingsToggle"
                                 aria-expanded="false" aria-controls="hubSettingsPanel" title="Settings">
@@ -1124,11 +1246,8 @@
                             <select id="colorModeSelect" aria-label="Theme">
                                 <option value="light">Light</option>
                                 <option value="dark">Dark</option>
-                                <option value="polka-dots">Polka dots</option>
                             </select>
                         </div>
-                        <button type="button" id="openVolViewClientBtn" class="hub-settings-launch"
-                                onclick="openVolViewClient()">Open VolView</button>
                         <button type="button" id="hubAboutBtn" class="hub-settings-launch"
                                 onclick="showAboutHub()">About</button>
                     </div>
@@ -1195,6 +1314,7 @@
         const METRICS_URL = '/api/hub/admin/metrics';
         const METRICS_POLL_MS = 2000;
         const METRICS_HISTORY_LEN = 60;
+        const CAST_HEADER_LABEL = 'Cast Interface';
 
         const metricsHistory = {
             memory: [],
@@ -1204,9 +1324,66 @@
         let metricsPollTimer = null;
         let lastSnapshotUpdatedAt = null;
 
+        function closeHubCastRadioMenu() {
+            const menu = document.getElementById('hubCastRadioMenu');
+            const btn = document.getElementById('hubCastRadioBtn');
+            if (menu) {
+                menu.hidden = true;
+            }
+            if (btn) {
+                btn.setAttribute('aria-expanded', 'false');
+            }
+        }
+
+        function openHubCastRadioMenu() {
+            closeHubSettings();
+            const menu = document.getElementById('hubCastRadioMenu');
+            const btn = document.getElementById('hubCastRadioBtn');
+            if (menu) {
+                menu.hidden = false;
+            }
+            if (btn) {
+                btn.setAttribute('aria-expanded', 'true');
+            }
+        }
+
+        function initHubCastRadioMenu() {
+            const btn = document.getElementById('hubCastRadioBtn');
+            const menu = document.getElementById('hubCastRadioMenu');
+            const sessionInfoBtn = document.getElementById('hubCastRadioSessionInfo');
+            if (!btn || !menu) {
+                return;
+            }
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (menu.hidden) {
+                    openHubCastRadioMenu();
+                } else {
+                    closeHubCastRadioMenu();
+                }
+            });
+            sessionInfoBtn?.addEventListener('click', () => {
+                closeHubCastRadioMenu();
+                showHubSessionInfoDialog();
+            });
+            document.addEventListener('click', (e) => {
+                if (!menu.hidden && !menu.contains(e.target) && e.target !== btn) {
+                    closeHubCastRadioMenu();
+                }
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    closeHubCastRadioMenu();
+                }
+            });
+        }
+
+        function hubCastRadioBtn() {
+            return document.getElementById('hubCastRadioBtn');
+        }
+
         function hubProductName() {
-            const radioEl = document.getElementById('hubCastRadio');
-            const fromRadio = radioEl?.getAttribute('data-hub-product-name')?.trim();
+            const fromRadio = hubCastRadioBtn()?.getAttribute('data-hub-product-name')?.trim();
             if (fromRadio) {
                 return fromRadio;
             }
@@ -1258,8 +1435,18 @@
             };
         }
 
-        function updateHubCastRadioTooltip(adminClientCount) {
-            const radioEl = document.getElementById('hubCastRadio');
+        function hubSessionInfoLines(adminClientCount) {
+            const lines = [hubProductName(), connectionStatusText(adminClientCount)];
+            if (lastSnapshotUpdatedAt) {
+                lines.push(
+                    'Last updated: ' + lastSnapshotUpdatedAt.toLocaleTimeString()
+                );
+            }
+            return lines;
+        }
+
+        function updateHubCastRadioAppearance(adminClientCount) {
+            const radioEl = hubCastRadioBtn();
             if (!radioEl) {
                 return;
             }
@@ -1274,14 +1461,35 @@
             if (slashEl) {
                 slashEl.hidden = !showSlash;
             }
-            const lines = [hubProductName(), connectionStatusText(adminClientCount)];
-            if (lastSnapshotUpdatedAt) {
-                lines.push(
-                    'Last updated: ' + lastSnapshotUpdatedAt.toLocaleTimeString()
-                );
-            }
-            radioEl.title = lines.join('\n');
-            radioEl.setAttribute('aria-label', lines.join('. '));
+            radioEl.setAttribute('aria-label', CAST_HEADER_LABEL);
+            radioEl.title = CAST_HEADER_LABEL;
+        }
+
+        function showHubSessionInfoDialog() {
+            const lines = hubSessionInfoLines(lastAdminClientCount);
+            const backdrop = document.createElement('div');
+            backdrop.className = 'modal-backdrop';
+            const dialog = document.createElement('div');
+            dialog.className = 'modal-dialog';
+            dialog.setAttribute('role', 'dialog');
+            dialog.setAttribute('aria-labelledby', 'hubSessionInfoTitle');
+            dialog.innerHTML = `
+                <h3 id="hubSessionInfoTitle">Session info</h3>
+                ${lines.map((line) => `<p>${escapeHtml(line)}</p>`).join('')}
+                <div class="modal-actions">
+                    <button type="button" id="closeHubSessionInfoBtn" class="btn-cancel">Close</button>
+                </div>
+            `;
+            document.body.appendChild(backdrop);
+            document.body.appendChild(dialog);
+
+            const closeDialog = () => {
+                document.body.removeChild(backdrop);
+                document.body.removeChild(dialog);
+            };
+
+            backdrop.onclick = closeDialog;
+            document.getElementById('closeHubSessionInfoBtn').onclick = closeDialog;
         }
 
         /** IHE actor keywords and full names (aligned with Cast client ACTOR_PRESETS). */
@@ -1641,7 +1849,7 @@
                 );
                 displayAuditLog(audit.entries || []);
                 lastSnapshotUpdatedAt = new Date();
-                updateHubCastRadioTooltip(lastAdminClientCount);
+                updateHubCastRadioAppearance(lastAdminClientCount);
             } catch (error) {
                 errorDiv.innerHTML =
                     `<div class="error">Error loading dashboard: ${escapeHtml(error.message)}</div>`;
@@ -2237,11 +2445,6 @@
             loadSnapshot();
         }
 
-        function openVolViewClient() {
-            const url = new URL('/volview-client/', window.location.origin).href;
-            window.open(url, '_blank', 'noopener,noreferrer');
-        }
-
         function closeHubSettings() {
             const settingsPanel = document.getElementById('hubSettingsPanel');
             const settingsToggle = document.getElementById('hubSettingsToggle');
@@ -2253,27 +2456,69 @@
             }
         }
 
-        function showAboutHub() {
+        const ABOUT_LICENSE_ACK_HTML = (homepage) => {
+            const licenseUrl = `${String(homepage || '').replace(/\/$/, '')}/blob/main/LICENSE`;
+            return `
+            <div class="about-disclaimer">
+                <h4>License</h4>
+                <p>Cast Interface is distributed under the <a href="${escapeHtml(licenseUrl)}" target="_blank" rel="noopener noreferrer">MIT License</a>.</p>
+                <h4>Acknowledgements</h4>
+                <p><strong>3D Slicer</strong> &mdash; open-source platform for medical image computing from the <a href="https://www.slicer.org/" target="_blank" rel="noopener noreferrer">3D Slicer community</a>.</p>
+            </div>`;
+        };
+
+        const ABOUT_TRADEMARK_HTML = `
+            <div class="about-disclaimer">
+                <h4>Standards and trademarks</h4>
+                <p>DICOM&reg; is the registered trademark of the National Electrical Manufacturers Association (NEMA) for its standards publications relating to digital imaging and communications in medicine. FHIR&reg; and related HL7 marks are registered trademarks of Health Level Seven International (HL7). IHE&reg; is a registered trademark of HIMSS. VolView&reg; is a trademark of Kitware, Inc. OHIF&reg; is a trademark of the Open Health Imaging Foundation. Imaging Data Commons&reg; is a trademark of the National Cancer Institute.</p>
+                <p>The Cast Interface (including its hub, clients, and documentation) references ideas, workflows, and vocabulary drawn from these standards&mdash;such as DICOM objects and metadata, FHIR and FHIRcast-style context and events, and IHE actor roles (for example, Image Display and Evidence Creator)&mdash;and product names such as VolView, OHIF, and Imaging Data Commons solely to describe interoperability behavior.</p>
+                <p><strong>Cast Interface is not part of these standards.</strong> It is not published by NEMA, HL7, or HIMSS, and is not an IHE Integration Profile, a FHIR implementation guide, or a DICOM conformance statement. Use of standard names and terms does not imply endorsement, certification, or official status. All other product and company names are trademarks of their respective owners.</p>
+            </div>`;
+
+        function aboutBannerSrc() {
+            const mode = document.documentElement.dataset.mode || 'dark';
+            return mode === 'dark'
+                ? '/static/images/banner_dark.png'
+                : '/static/images/banner.png';
+        }
+
+        async function showAboutHub() {
+            closeHubCastRadioMenu();
             closeHubSettings();
+            let aboutName = 'Cast Interface';
+            let aboutDescription =
+                '3D Slicer extension for desktop integration workflows for healthcare providers and researchers.';
+            let aboutHomepage = 'https://github.com/mbellehumeur/SlicerCastInterface/';
+            try {
+                const response = await fetch('/api/hub/admin/about');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.name) aboutName = String(data.name);
+                    if (data.description) aboutDescription = String(data.description);
+                    if (data.homepage) aboutHomepage = String(data.homepage);
+                }
+            } catch (err) {
+                console.warn('About metadata unavailable:', err);
+            }
             const backdrop = document.createElement('div');
             backdrop.className = 'modal-backdrop';
             const dialog = document.createElement('div');
             dialog.className = 'modal-dialog about-dialog';
             dialog.setAttribute('role', 'dialog');
             dialog.setAttribute('aria-labelledby', 'aboutHubTitle');
-            const hubUrl = window.location.origin;
             dialog.innerHTML = `
-                <h3 id="aboutHubTitle">About Cast Hub</h3>
-                <p>3D Slicer Cast Interface hub — coordinates CAST subscriptions, events, and resource servers.</p>
-                <p class="about-meta"><strong>Hub URL:</strong> ${escapeHtml(hubUrl)}</p>
-                <div class="about-links">
-                    <button type="button" id="aboutOpenVolViewBtn">Open VolView</button>
+                <div class="about-banner-wrap">
+                    <img class="about-banner" src="${escapeHtml(aboutBannerSrc())}"
+                         alt="${escapeHtml(aboutName)}">
                 </div>
-                <div class="about-danger-zone">
-                    <p>Reset clears all subscriptions, conferences, and message log entries. This cannot be undone.</p>
-                    <button type="button" id="aboutResetServerBtn" class="btn-confirm-reset">Reset server</button>
+                <div class="about-header-text">
+                    <h3 id="aboutHubTitle">About ${escapeHtml(aboutName)}</h3>
                 </div>
-                <div class="modal-actions">
+                <p class="about-body">${escapeHtml(aboutDescription)} This admin page is embedded in the hub. See the <a href="${escapeHtml(aboutHomepage)}" target="_blank" rel="noopener noreferrer">3D Slicer Cast interface extension</a> documentation.</p>
+                ${ABOUT_LICENSE_ACK_HTML(aboutHomepage)}
+                ${ABOUT_TRADEMARK_HTML}
+                <div class="modal-actions modal-actions-about">
+                    <button type="button" id="aboutResetServerBtn" class="btn-confirm-reset btn-sm">Reset server</button>
                     <button type="button" id="closeAboutBtn" class="btn-cancel">Close</button>
                 </div>
             `;
@@ -2287,9 +2532,6 @@
 
             backdrop.onclick = closeAbout;
             document.getElementById('closeAboutBtn').onclick = closeAbout;
-            document.getElementById('aboutOpenVolViewBtn').onclick = () => {
-                openVolViewClient();
-            };
             document.getElementById('aboutResetServerBtn').onclick = () => {
                 const resetBtn = document.getElementById('aboutResetServerBtn');
                 closeAbout();
@@ -2378,7 +2620,7 @@
         }
         
         function updateConnectionStatus(adminClientCount) {
-            updateHubCastRadioTooltip(adminClientCount);
+            updateHubCastRadioAppearance(adminClientCount);
         }
         
         // Admin WebSocket connection
@@ -2461,6 +2703,7 @@
 
         // Connect on page load
         window.addEventListener('load', function() {
+            initHubCastRadioMenu();
             connectAdminWebSocket();
             loadSnapshot();
             startMetricsPolling();

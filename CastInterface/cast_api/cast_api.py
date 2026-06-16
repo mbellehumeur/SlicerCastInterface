@@ -723,7 +723,7 @@ async def _quiet_hub_uvicorn_access_logs() -> None:
     else:
         cast_hub_logger.info(
             "Cast hub SPA clients: none (build and sync volview-client, "
-            "vtkjs-worklist-client, OHIF-client)"
+            "vtkjs-worklist-client, slim, OHIF-client)"
         )
     sample_count = len(_scan_hub_sample_studies())
     samples_root = _hub_samples_root()
@@ -764,6 +764,7 @@ if os.path.exists(resources_dir):
 SPA_CLIENTS = [
     ("volview-client", "volview-client"),
     ("worklist-client", "vtkjs-worklist-client"),
+    ("slim", "slim"),
 ]
 
 # OHIF is served at hub root (/) — see _register_hub_root_spa() after API routes.
@@ -1966,6 +1967,39 @@ async def get_conference_client():
 async def get_hub_status():
     """Get hub status page showing all users and endpoints"""
     return _serve_html_page("admin.html")
+
+
+def _read_cast_extension_version() -> str:
+    """Extension/hub version for admin About (cast_api/VERSION or parent CastInterface/VERSION)."""
+    for candidate in (
+        os.path.join(base_dir, "VERSION"),
+        os.path.join(os.path.dirname(base_dir), "VERSION"),
+    ):
+        if not os.path.isfile(candidate):
+            continue
+        try:
+            with open(candidate, encoding="utf-8") as handle:
+                line = handle.readline().strip()
+            if line:
+                return line
+        except OSError:
+            pass
+    return "development"
+
+
+@app.get("/api/hub/admin/about")
+@app.get("/api/hub/admin/about/")
+async def get_admin_about():
+    """Metadata for the admin About dialog (extension name, version, homepage)."""
+    return {
+        "name": "Cast Interface",
+        "description": (
+            "3D Slicer extension for desktop integration workflows "
+            "for healthcare providers and researchers."
+        ),
+        "version": _read_cast_extension_version(),
+        "homepage": "https://github.com/mbellehumeur/SlicerCastInterface/",
+    }
 
 
 @app.get("/api/hub/admin/metrics")

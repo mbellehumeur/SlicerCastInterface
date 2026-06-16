@@ -40,7 +40,10 @@ class CastInterface(ScriptedLoadableModule):
         self.parent.acknowledgementText = _(
             """
             Cast client protocol aligned with vtk-js CastClient. <br>
-            The Cast hub server lives in this extension under cast_api/ (port 2018).
+            The Cast hub server lives in this extension under cast_api/ (port 2018).<br><br>
+            Distributed under the MIT License.<br><br>
+            <b>3D Slicer</b> &mdash; open-source platform for medical image computing from the
+            <a href="https://www.slicer.org/">3D Slicer community</a>.
             """
         )
 

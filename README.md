@@ -38,6 +38,7 @@ The worklist example demonstrates:
 - **IDC Claude** — Build a personal IDC study worklist from natural-language queries; Claude and the idc-index run as a hub-connected resource server.
 - **OHIF** — Open OHIF viewer instances that stay in sync with the worklist.
 - **VolView** — Open VolView instances that stay in sync with the worklist.
+- **VSlim** — Open Slim instances that stay in sync with the worklist.
 - **Scene view** — Show each connected image display’s layout (including 3D slicer on same or remote hosts).
 - **Total Segmentator** — From OHIF or VolView, send an MR or CT study to TotalSegmentator and receive segmentation results (SEG or RTSTRUCT).  Total segmentator is connected to the hub as a resource server.
 
@@ -137,11 +138,13 @@ Since the resource servers are not on the internet, you will get shared keys for
 
 ## License
 
-MIT License
+Copyright (c) 2026 Martin Bellehumeur, M. Eng.
 
----
+Cast Interface is distributed under the [MIT License](LICENSE).
 
 ## Acknowledgements
+
+**3D Slicer** — open-source platform for medical image computing from the [3D Slicer community](https://www.slicer.org/). This extension is built for and distributed through the 3D Slicer extension ecosystem.
 
 
 **TotalSegmentator** was created by the Department of Research and Analysis at University Hospital Basel. If you use it, please cite our Radiology: Artificial Intelligence paper ([free preprint](https://arxiv.org/abs/2208.05868)). If you use it for MR images, please cite the TotalSegmentator MRI *Radiology* paper ([free preprint](https://arxiv.org/abs/2405.19492)).
@@ -157,7 +160,7 @@ MIT License
 
 **OHIF** — open-source zero-footprint viewer from the [Open Health Imaging Foundation](https://ohif.org/).
 
-**3D Slicer** — open-source platform for medical image computing from the [3D Slicer community](https://www.slicer.org/).
+**Slim** — interoperable slide microscopy viewer from the [Imaging Data Commons](https://github.com/ImagingDataCommons/slim) (National Cancer Institute).
 
 ---
 

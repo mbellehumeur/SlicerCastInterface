@@ -116,13 +116,13 @@ When a subscription is removed (explicit unsubscribe, WebSocket disconnect, or s
 
 Subscribe with `subscription-removed` in `hub.events` (or `*`) to receive these notifications.
 
-**Binary file transfer:** STOW batch only — `POST /api/hub/` as `multipart/related` (Cast JSON manifest + one part per `context.files[]` entry). Hub fans out one text WebSocket message with `files[].payloadId`; subscribers download via `GET /api/hub/payloads/{payloadId}` when the app calls `fetch_all_payloads`. Full write-up: Slicer extension `CastInterface/docs/binary-file-transfer.md` (same content as in a pw45 checkout). Legacy `multipart/form-data` returns HTTP 400.
+**Binary file transfer:** binary batch only — `POST /api/hub/` as `multipart/related` (Cast JSON manifest + one part per `context.files[]` entry). Hub fans out one text WebSocket message with `files[].payloadId`; subscribers download via `GET /api/hub/payloads/{payloadId}` when the app calls `fetch_all_payloads`. Full write-up: Slicer extension `CastInterface/docs/binary-file-transfer.md` (same content as in a pw45 checkout). Legacy `multipart/form-data` returns HTTP 400.
 
 **Filename policy:** When the hub stores binary bytes (HTTP payload store or multipart upload), `resource.fileName` must match an allowlisted suffix and pass a double-extension check. See [filename-policy.md](filename-policy.md). Disable with `CAST_HUB_FILENAME_POLICY=off`.
 
 ### DICOM send (`dicom-send`)
 
-VolView publishes study/series/slice data as a single **STOW batch** `dicom-send`: `context.files[]` manifest plus one `application/dicom` part per file (`multipart/related`). Receivers download bytes via `payloadId` when ready. Helpers: VolView `publishDicomSendSeries()` / `publishDicomStowSend()` in [`cast-client.ts`](../../../src/io/cast-client.ts), `buildDicomStowManifest()` in [`build-dicom-stow-manifest.ts`](../../../src/io/cast/build-dicom-stow-manifest.ts).
+VolView publishes study/series/slice data as a single **binary batch** `dicom-send`: `context.files[]` manifest plus one `application/dicom` part per file (`multipart/related`). Receivers download bytes via `payloadId` when ready. Helpers: VolView `publishDicomSendSeries()` / `publishDicomSendForScope()` in [`cast-client.ts`](../../../src/io/cast-client.ts), `buildDicomSendManifest()` in [`build-dicom-send-manifest.ts`](../../../src/io/cast/build-dicom-send-manifest.ts).
 
 ---
 

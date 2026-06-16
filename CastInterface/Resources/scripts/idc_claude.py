@@ -68,6 +68,14 @@ ACTION_SEARCH = "search"
 ACTION_ADD_STUDY = "addStudy"
 IDC_CLAUDE_SEND_EVENT = "idc-claude-send"
 
+# IDC-maintained DICOMweb proxy (current release; no auth). Used for SM/WSI series.
+IDC_DICOMWEB_ROOT = (
+    "https://proxy.imaging.datacommons.cancer.gov/current/"
+    "viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb"
+)
+OPEN_MODE_DICOMWEB = "dicomweb"
+MODALITY_WSI = "SM"
+
 _job_busy = False
 _idc_client: Any = None
 _series_urls_cache: Dict[str, List[str]] = {}
@@ -557,10 +565,19 @@ def _post_process_rows(df, max_studies: int, max_slices: int, max_size_mb: float
     if df is None or df.empty:
         return df
     work = df.copy()
-    if "instanceCount" in work.columns:
-        work = work[work["instanceCount"] <= max_slices]
-    if "series_size_MB" in work.columns:
-        work = work[work["series_size_MB"] < max_size_mb]
+    if "Modality" in work.columns:
+        is_wsi = work["Modality"].astype(str).str.upper() == MODALITY_WSI
+        size_ok = ~is_wsi
+        if "instanceCount" in work.columns:
+            size_ok = size_ok & (work["instanceCount"] <= max_slices)
+        if "series_size_MB" in work.columns:
+            size_ok = size_ok & (work["series_size_MB"] < max_size_mb)
+        work = work[is_wsi | size_ok]
+    else:
+        if "instanceCount" in work.columns:
+            work = work[work["instanceCount"] <= max_slices]
+        if "series_size_MB" in work.columns:
+            work = work[work["series_size_MB"] < max_size_mb]
     if "StudyInstanceUID" not in work.columns or "SeriesInstanceUID" not in work.columns:
         raise RuntimeError(
             "SQL result must include StudyInstanceUID and SeriesInstanceUID columns"
@@ -585,7 +602,7 @@ def _study_metadata_from_row(row, org_id: str, index: int, source_bucket: str) -
     description = " — ".join(label_parts) if label_parts else f"IDC study {index}"
 
     study_id = f"{org_id}-{index:02d}"
-    return {
+    meta: Dict[str, Any] = {
         "id": study_id,
         "name": f"IDC {index}",
         "description": description,
@@ -597,6 +614,12 @@ def _study_metadata_from_row(row, org_id: str, index: int, source_bucket: str) -
         "instanceCount": slice_count,
         "organization": org_id,
     }
+    modality = str(row.get("Modality") or "").strip().upper()
+    if modality == MODALITY_WSI:
+        meta["openMode"] = OPEN_MODE_DICOMWEB
+        meta["dicomwebRoot"] = IDC_DICOMWEB_ROOT
+        meta["size"] = "DICOMweb"
+    return meta
 
 
 def _attach_series_urls(client, study: Dict[str, Any], source_bucket: str) -> dict:
@@ -772,10 +795,32 @@ def _add_idc_study_with_urls(
     if not series_uid:
         return {"source": "idc-claude", "error": "Missing seriesInstanceUID in study"}
 
-    bucket = str(study_in.get("sourceBucket") or source_bucket).strip() or source_bucket
+    open_mode = str(study_in.get("openMode") or "").strip().lower()
     organization = str(
         request_context.get("organization") or study_in.get("organization") or ""
     ).strip()
+
+    if open_mode == OPEN_MODE_DICOMWEB:
+        study = dict(study_in)
+        if not str(study.get("dicomwebRoot") or "").strip():
+            study["dicomwebRoot"] = IDC_DICOMWEB_ROOT
+        if organization:
+            study["organization"] = organization
+        _idc_log(
+            "addStudy dicomweb organization=%s series=%s study_id=%s",
+            organization,
+            series_uid,
+            study.get("id") or "",
+        )
+        _status_log("WSI study ready (DICOMweb open, no file download)")
+        return {
+            "source": "idc-claude",
+            "action": ACTION_ADD_STUDY,
+            "organization": organization,
+            "study": study,
+        }
+
+    bucket = str(study_in.get("sourceBucket") or source_bucket).strip() or source_bucket
 
     _idc_log(
         "addStudy start organization=%s series=%s study_id=%s",

@@ -155,8 +155,8 @@ def _anim_style(cfg: Dict[str, Any]) -> str:
         44%, 72% {{ stroke: #1f9d55; opacity: 1; }}
         74%, 100% {{ stroke: #cbd5e1; opacity: 0.5; }}
       }}
-      .packetStowPost {{ opacity: 0; animation: packetStowPost {DUR} infinite; }}
-      @keyframes packetStowPost {{
+      .packetBatchPost {{ opacity: 0; animation: packetBatchPost {DUR} infinite; }}
+      @keyframes packetBatchPost {{
         0%, 3% {{ opacity: 0; transform: translate({psx}px, {psy}px); }}
         5% {{ opacity: 1; transform: translate({psx}px, {psy}px); }}
         18% {{ opacity: 1; transform: translate({pex}px, {pey}px); }}
@@ -389,7 +389,7 @@ def build_svg(cfg: Dict[str, Any], b64: str) -> str:
         f'  <g id="uploadFileStack">{FILE_STACK_INNER}\n',
         '    <text x="38" y="-6" text-anchor="middle" font-family="Arial" font-size="10" font-weight="700" fill="#2457d6">3 files</text>\n',
         "  </g>\n",
-        '  <g class="packetStowPost">\n',
+        '  <g class="packetBatchPost">\n',
         '    <rect x="-92" y="-20" width="184" height="40" rx="18" fill="#2457d6"/>\n',
         '    <text x="0" y="-4" text-anchor="middle" class="packetSub">HTTP POST</text>\n',
         '    <text x="0" y="11" text-anchor="middle" class="packetText">multipart + files</text>\n',
