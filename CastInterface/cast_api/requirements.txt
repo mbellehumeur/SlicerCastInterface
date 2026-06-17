@@ -3,3 +3,4 @@ uvicorn[standard]>=0.22.0
 python-multipart>=0.0.6
 aiohttp>=3.12.0
 psutil>=5.9.0
+idc-index==0.12.3

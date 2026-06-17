@@ -90,6 +90,7 @@ from cast_filename_policy import (
     enforce_transfer_filenames_for_notification,
 )
 from hub_metrics import collect_hub_metrics
+from idc_index_service import resolve_study_series_files
 
 # Default cast-request fan-out timeout (seconds). Collated HTTP reply returns
 # when all targets respond or this cap is reached (partial + timedOut ok).
@@ -588,6 +589,7 @@ try:
     from fastapi.staticfiles import StaticFiles
     import uvicorn
     from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+    import aiohttp
 except ImportError:
     print("ERROR: FastAPI not installed. Install with: pip install fastapi uvicorn")
     sys.exit(1)
@@ -1739,6 +1741,130 @@ async def get_hub_sample_file(study_id: str, file_name: str):
         except (OSError, json.JSONDecodeError):
             pass
     return FileResponse(file_path, media_type=media_type)
+
+
+IDC_MCP_UPSTREAM_DEFAULT = (
+    "https://idc-mcp-v3-293449031882.us-central1.run.app/mcp"
+)
+
+
+def _env_idc_mcp_upstream_url() -> str:
+    raw = os.getenv("CAST_HUB_IDC_MCP_UPSTREAM_URL", IDC_MCP_UPSTREAM_DEFAULT)
+    return str(raw or IDC_MCP_UPSTREAM_DEFAULT).strip().rstrip("/")
+
+
+def _env_idc_mcp_proxy_timeout_seconds() -> float:
+    raw = os.getenv("CAST_HUB_IDC_MCP_PROXY_TIMEOUT_SECONDS", "180")
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return 180.0
+
+
+@app.post("/api/hub/idc/series-files")
+@app.post("/api/hub/idc/series-files/")
+async def post_hub_idc_series_files(request: Request):
+    """Resolve IDC series metadata to per-instance HTTPS files via idc-index."""
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid JSON body: {exc}"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="JSON body must be an object")
+
+    study = payload.get("study")
+    organization = str(payload.get("organization") or "").strip()
+    source_bucket = str(payload.get("sourceBucket") or "aws").strip() or "aws"
+    if not isinstance(study, dict):
+        raise HTTPException(status_code=400, detail="Missing study object")
+
+    started = time.time()
+    try:
+        result = await asyncio.to_thread(
+            resolve_study_series_files,
+            study,
+            organization,
+            source_bucket,
+        )
+    except MemoryError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "IDC index lookup exceeded available memory on this hub instance. "
+                "Use a larger App Service plan or resolve series files locally."
+            ),
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        message = str(exc)
+        status = 422 if "max" in message.lower() and "files" in message.lower() else 400
+        raise HTTPException(status_code=status, detail=message) from exc
+    except Exception as exc:
+        logger = logging.getLogger("cast_hub")
+        logger.exception(
+            "idc series-files failed series=%s",
+            str(study.get("seriesInstanceUID") or "").strip(),
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"IDC index lookup failed: {exc}",
+        ) from exc
+
+    resolved_study = result.get("study") if isinstance(result, dict) else {}
+    file_count = len(resolved_study.get("files") or []) if isinstance(resolved_study, dict) else 0
+    series_uid = str(study.get("seriesInstanceUID") or "").strip()
+    logging.getLogger("cast_hub").info(
+        "idc series-files series=%s files=%d elapsed=%.0fms",
+        series_uid,
+        file_count,
+        (time.time() - started) * 1000,
+    )
+    return result
+
+
+@app.post("/idc-mcp-proxy/mcp")
+async def idc_mcp_proxy(request: Request):
+    """Streamable HTTP proxy to the IDC MCP Cloud Run endpoint."""
+    upstream = _env_idc_mcp_upstream_url()
+    body = await request.body()
+    forward_headers: Dict[str, str] = {}
+    for header_name in ("content-type", "accept", "mcp-session-id"):
+        value = request.headers.get(header_name)
+        if value:
+            forward_headers[header_name] = value
+
+    timeout = aiohttp.ClientTimeout(total=_env_idc_mcp_proxy_timeout_seconds())
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                upstream,
+                data=body,
+                headers=forward_headers,
+            ) as upstream_resp:
+                response_headers: Dict[str, str] = {}
+                for header_name in ("content-type", "mcp-session-id"):
+                    value = upstream_resp.headers.get(header_name)
+                    if value:
+                        response_headers[header_name] = value
+                content = await upstream_resp.read()
+                return Response(
+                    content=content,
+                    status_code=upstream_resp.status,
+                    headers=response_headers,
+                )
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(
+            status_code=504,
+            detail="IDC MCP upstream request timed out",
+        ) from exc
+    except aiohttp.ClientError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"IDC MCP upstream error: {exc}",
+        ) from exc
 
 
 def _conference_host_topic(conf: Dict) -> str:
