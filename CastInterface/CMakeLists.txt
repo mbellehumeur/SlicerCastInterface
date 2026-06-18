@@ -12,8 +12,10 @@ set(MODULE_PYTHON_SCRIPTS
   CastInterface.py
   Lib/CastHub.py
   Lib/CastImageDisplayClient.py
+  Lib/CastConferenceDialog.py
   Lib/CastResourceServers.py
   Lib/cast_client.py
+  Lib/cast_conference.py
   Lib/cast_provider_runtime.py
   Lib/image_display_client_annotations.py
   Lib/image_display_client_handler.py

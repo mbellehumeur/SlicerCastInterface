@@ -35,22 +35,32 @@ You can test websocket subscription integration with the vtk-js IO module cast i
 
 The worklist example demonstrates:
 
-- **IDC MCP server** — Build a personal IDC study worklist from natural-language queries.
 - **OHIF** — Open OHIF viewer instances that stay in sync with the worklist.
 - **VolView** — Open VolView instances that stay in sync with the worklist.
 - **Slim** — Open Slim instances that stay in sync with the worklist.
-- **Scene views** — Show each connected image display’s layout (including 3D slicer on same or remote hosts): <a href="CastInterface/docs/images/sceneviews.png" target="_blank">
-  <img src="CastInterface/docs/images/sceneviews.png" alt="Scene views" width="200">
-</a>
+- **IDC MCP server** — Build a personal IDC study worklist from natural-language queries.
 
-- **Total Segmentator** — From OHIF or VolView, send an MR or CT study to TotalSegmentator and receive segmentation results (SEG or RTSTRUCT). Total segmentator is connected to the hub as a resource server. <a href="CastInterface/docs/images/VolViewTotalSegmentator.png" target="_blank">
-  <img src="CastInterface/docs/images/VolViewTotalSegmentator.png" alt="Total Segmentator in VolView" width="200">
-</a>
+  <a href="CastInterface/docs/images/IDC_MCP_Server.png" target="_blank">
+    <img src="CastInterface/docs/images/IDC_MCP_Server.png" alt="IDC MCP server" width="200">
+  </a>
 
-- **Conferencing** — From worklist, Slim, OHIF, VolView or 3D Slicer use the radio icon to start a conference: <a href="CastInterface/docs/images/conference-icon.png" target="_blank">
-  <img src="CastInterface/docs/images/conference-icon.png" alt="Conferencing" width="200">
-</a>
+- **Scene views** — Show each connected image display’s layout (including 3D Slicer on same or remote hosts).
 
+  <a href="CastInterface/docs/images/sceneviews.png" target="_blank">
+    <img src="CastInterface/docs/images/sceneviews.png" alt="Scene views" width="200">
+  </a>
+
+- **Total Segmentator** — From OHIF or VolView, send an MR or CT study to TotalSegmentator and receive segmentation results (SEG or RTSTRUCT). Connected to the hub as a resource server.
+
+  <a href="CastInterface/docs/images/VolViewTotalSegmentator.png" target="_blank">
+    <img src="CastInterface/docs/images/VolViewTotalSegmentator.png" alt="Total Segmentator in VolView" width="200">
+  </a>
+
+- **Conferencing** — From worklist, Slim, OHIF, VolView, or 3D Slicer, use the radio icon to start a conference.
+
+  <a href="CastInterface/docs/images/conference-icon.png" target="_blank">
+    <img src="CastInterface/docs/images/conference-icon.png" alt="Conferencing" width="200">
+  </a>
 
 Cast has a context/content sharing strategy and hub architecture that differs somewhat from FHIRcast, see description [here](CastInterface/docs/cast-description.md).
 
@@ -114,8 +124,6 @@ After installation, the resource servers outbound ports can also be locked down,
 
 In theory, the hub can be cloud deployed as a serverless application. In practice, many of those low-cost offerings do not support websocket services and a docker based offering is necessary like Azure WebApps or AWS Elastic Beanstalk.
 
-- **Cast hub on Azure App Service:** [azure-webapp.md](CastInterface/cast_api/azure-webapp.md)
-- **3D Slicer on Azure (Windows GPU VM + RDP):** [azure-slicer-gpu-readme.md](CastInterface/docs/azure-slicer-gpu-readme.md)
 
 For high availability deployment a hot standby configuration can be used. The "reset server" button in the hub admin portal allows testing workflow behavior during failover.
 
