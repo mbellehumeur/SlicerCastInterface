@@ -35,12 +35,21 @@ You can test websocket subscription integration with the vtk-js IO module cast i
 
 The worklist example demonstrates:
 
-- **IDC Claude** — Build a personal IDC study worklist from natural-language queries; Claude and the idc-index run as a hub-connected resource server.
+- **IDC MCP server** — Build a personal IDC study worklist from natural-language queries.
 - **OHIF** — Open OHIF viewer instances that stay in sync with the worklist.
 - **VolView** — Open VolView instances that stay in sync with the worklist.
 - **Slim** — Open Slim instances that stay in sync with the worklist.
-- **Scene view** — Show each connected image display’s layout (including 3D slicer on same or remote hosts).
-- **Total Segmentator** — From OHIF or VolView, send an MR or CT study to TotalSegmentator and receive segmentation results (SEG or RTSTRUCT). Total segmentator is connected to the hub as a resource server.
+- **Scene views** — Show each connected image display’s layout (including 3D slicer on same or remote hosts): <a href="CastInterface/docs/images/sceneviews.png" target="_blank">
+  <img src="CastInterface/docs/images/sceneviews.png" alt="Scene views" width="200">
+</a>
+
+- **Total Segmentator** — From OHIF or VolView, send an MR or CT study to TotalSegmentator and receive segmentation results (SEG or RTSTRUCT). Total segmentator is connected to the hub as a resource server. <a href="CastInterface/docs/images/VolViewTotalSegmentator.png" target="_blank">
+  <img src="CastInterface/docs/images/VolViewTotalSegmentator.png" alt="Total Segmentator in VolView" width="200">
+</a>
+
+- **Conferencing** — From worklist, Slim, OHIF, VolView or 3D Slicer use the radio icon to start a conference: <a href="CastInterface/docs/images/conference-icon.png" target="_blank">
+  <img src="CastInterface/docs/images/conference-icon.png" alt="Conferencing" width="200">
+</a>
 
 
 Cast has a context/content sharing strategy and hub architecture that differs somewhat from FHIRcast, see description [here](CastInterface/docs/cast-description.md).
@@ -49,11 +58,11 @@ Cast has a context/content sharing strategy and hub architecture that differs so
 
 ## Extension Features
 
-The extension features a hub and two cast interfaces: one for connecting backend agents like TotalSegmentator or IDC Claude (Resource servers) and another one to connect the Slicer viewer (Image Display client) to the hub.
+The extension features a hub and two cast interfaces: one for connecting backend agents like Total Segmentator (Resource servers) and another one to connect the Slicer viewer (Image Display client) to the hub.
 
 
 #### Hub:
-The hub is the routing appliance that distributes the messages and handles the data transfer requests over the websocket connection to each client.
+The hub is the routing appliance that distributes the messages and handles the data transfer requests over the websocket to each client.  It allows clients to connect to each other through a single connection instead of developing mutiple interfaces.
 
 ![hub](CastInterface/docs/images/hub-ui.png)
 
@@ -67,25 +76,14 @@ It can be used without the slicer extension by running the "cast_api.py" script.
 Resource servers are agents that provide backend services to desktop integration. This allows users to, for example, view AI results without having to send them to the archive first.
 
 The resource server tab provides a visual description of how processing resources can be connected to the hub and made available to cast workflows.
-Here for example, in the VolView client:
-![Total Segmentator in VolView](CastInterface/docs/images/VolViewTotalSegmentator.png)
+
+![alt text](CastInterface/docs/images/ResourceServerFeature.png)
 
 
-Resource servers subscribe to all user topics for status-request and dicom/nifti events. They send binary results back to the user through the hub.
-In the default example, Total Segmentator and IDC Claude skill is used to provide the added functionality to the desktop integration. 
+Resource servers subscribe to all user topics for status-request and dicom/nifti events.
+In the example, Total Segmentator sends binary results back to the user through the hub.
 
 Since these resources do not log in as a user, they need a *resource server entry* in the customer's authorization server. This provides a client id and client secret. For the cast extension hub, they must be configured in the environment variables of the hub for the resource to connect successfully.
-
-
-![resource servers](CastInterface/docs/images/ResourceServerFeature.png)
-
-
-This video shows VolView using the TotalSegmentator extension with the "Resource Server" setup. The video shows the binary transfer through the hub to 3D Slicer, pauses during the segmentation calculation and restarts just before the segmentation is sent to VolView.
-
-
-<a href="https://www.youtube.com/watch?v=pHp5QpeH1JE">
-  <img src="CastInterface/docs/images/video_thumbnail_resourceserver.png" alt="Resource server" width="900">
-</a>
 
 
 
@@ -115,6 +113,9 @@ For the hub, the architecture provides a significantly reduced attack surface an
 After installation, the resource servers outbound ports can also be locked down, allowing access to the hub and sites needed by the resource only.
 
 In theory, the hub can be cloud deployed as a serverless application. In practice, many of those low-cost offerings do not support websocket services and a docker based offering is necessary like Azure WebApps or AWS Elastic Beanstalk.
+
+- **Cast hub on Azure App Service:** [azure-webapp.md](CastInterface/cast_api/azure-webapp.md)
+- **3D Slicer on Azure (Windows GPU VM + RDP):** [azure-slicer-gpu-readme.md](CastInterface/docs/azure-slicer-gpu-readme.md)
 
 For high availability deployment a hot standby configuration can be used. The "reset server" button in the hub admin portal allows testing workflow behavior during failover.
 

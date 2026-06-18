@@ -259,13 +259,28 @@ def resolve_study_series_files(
 
     org = str(organization or study_in.get("organization") or "").strip()
     open_mode = str(study_in.get("openMode") or "").strip().lower()
+    if not open_mode:
+        open_mode = OPEN_MODE_DICOMWEB
 
     if open_mode == OPEN_MODE_DICOMWEB:
         study = dict(study_in)
         if not str(study.get("dicomwebRoot") or "").strip():
             study["dicomwebRoot"] = IDC_DICOMWEB_ROOT
+        study["openMode"] = OPEN_MODE_DICOMWEB
         if org:
             study["organization"] = org
+        bucket = (
+            str(study_in.get("sourceBucket") or source_bucket).strip()
+            or source_bucket
+        )
+        try:
+            study = _attach_series_urls(study, bucket)
+        except ValueError as exc:
+            logger.warning(
+                "dicomweb resolve: direct files skipped for series=%s: %s",
+                series_uid,
+                exc,
+            )
         return {
             "source": "hub-idc-index",
             "action": ACTION_ADD_STUDY,
