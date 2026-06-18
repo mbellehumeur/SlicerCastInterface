@@ -135,6 +135,8 @@
     </style>
   </defs>
 
+  <rect width="1200" height="700" fill="#ffffff"/>
+
   <text x="600" y="52" text-anchor="middle" class="title">Long Running Resources</text>
   <text x="600" y="84" text-anchor="middle" class="small">dicom-send, status-update, then dicom-send with results</text>
 

@@ -153,6 +153,8 @@
     </style>
   </defs>
 
+  <rect width="1200" height="700" fill="#ffffff"/>
+
   <text x="600" y="52" text-anchor="middle" class="title">Cast Conferencing</text>
   <text x="600" y="84" text-anchor="middle" class="small">Share the same case across workstations</text>
 
