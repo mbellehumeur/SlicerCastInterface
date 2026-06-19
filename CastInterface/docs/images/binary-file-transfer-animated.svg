@@ -21,11 +21,17 @@
       .captionBox { fill: #0f172a; opacity: 0.9; }
       .captionText { font: 700 13px Arial, Helvetica, sans-serif; fill: #fff; }
 
-      #castHubGraphic { transform-origin: 600px 340px; animation: hubPulse 30s infinite; }
+      #castHubGraphic { transform-origin: 0px 0px; animation: hubPulse 30s infinite; }
       @keyframes hubPulse {
         0%, 18% { transform: scale(1); }
-        22%, 32% { transform: scale(1.07); }
+        22%, 32% { transform: scale(1.06); }
         36%, 100% { transform: scale(1); }
+      }
+      #hubBroadcastArcs { opacity: 0.4; animation: hubBroadcastArcs 30s infinite; }
+      @keyframes hubBroadcastArcs {
+        0%, 20% { opacity: 0.4; }
+        22%, 88% { opacity: 1; }
+        90%, 100% { opacity: 0.4; }
       }
       #step1Caption { animation: step1Caption 30s infinite; }
       @keyframes step1Caption {
@@ -203,27 +209,28 @@
     <text x="220" y="410" text-anchor="middle" class="small">with medical images</text>
   </g>
   <g id="castHub">
-    <g id="castHubGraphic">
-      <circle cx="600" cy="340" r="18" fill="#0b55d9"/>
-      <circle cx="600" cy="278" r="9" fill="#0b55d9"/>
-      <circle cx="545" cy="310" r="12" fill="#0b55d9"/>
-      <circle cx="655" cy="310" r="12" fill="#0b55d9"/>
-      <circle cx="555" cy="385" r="12" fill="#0b55d9"/>
-      <circle cx="645" cy="385" r="12" fill="#0b55d9"/>
-      <line x1="600" y1="340" x2="600" y2="278" stroke="#0b55d9" stroke-width="8"/>
-      <line x1="600" y1="340" x2="545" y2="310" stroke="#0b55d9" stroke-width="8"/>
-      <line x1="600" y1="340" x2="655" y2="310" stroke="#0b55d9" stroke-width="8"/>
-      <line x1="600" y1="340" x2="555" y2="385" stroke="#0b55d9" stroke-width="8"/>
-      <line x1="600" y1="340" x2="645" y2="385" stroke="#0b55d9" stroke-width="8"/>
-    </g>
-    <text x="600" y="430" text-anchor="middle" class="heading">Cast Hub</text>
-    <text x="600" y="456" text-anchor="middle" class="small">HTTP payload store</text>
+    <text x="648" y="328" text-anchor="start" class="heading">Hub</text>
+    <text x="648" y="352" text-anchor="start" class="small">HTTP payload store</text>
     <g id="hubPayloadStack">
       <rect x="562" y="248" width="28" height="36" rx="4" fill="#dbeafe" stroke="#2457d6" stroke-width="2"/>
       <rect x="586" y="242" width="28" height="36" rx="4" fill="#dbeafe" stroke="#2457d6" stroke-width="2"/>
       <rect x="610" y="236" width="28" height="36" rx="4" fill="#dbeafe" stroke="#2457d6" stroke-width="2"/>
       <text x="600" y="228" text-anchor="middle" font-family="Arial" font-size="10" font-weight="700" fill="#2457d6">payloadId ×3</text>
       <text x="600" y="292" text-anchor="middle" font-family="Arial" font-size="9" font-weight="700" fill="#94a3b8">in-memory store</text>
+    </g>
+  </g>
+  <g transform="translate(600, 350)">
+    <g id="castHubGraphic">
+      <g transform="rotate(-42)">
+        <g id="hubBroadcastArcs" fill="none" stroke="#38bdf8" stroke-linecap="round">
+          <path d="M30 -12 A 14 14 0 0 1 30 12" stroke-width="3"/>
+          <path d="M38 -20 A 22 22 0 0 1 38 20" stroke-width="2.5" opacity="0.8"/>
+          <path d="M46 -28 A 30 30 0 0 1 46 28" stroke-width="2" opacity="0.55"/>
+        </g>
+        <g id="hubDish">
+          <circle cx="0" cy="0" r="20" fill="#e0f2fe" stroke="#1e40af" stroke-width="4"/>
+        </g>
+      </g>
     </g>
   </g>
   <g id="resourceServer">

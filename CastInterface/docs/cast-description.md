@@ -5,31 +5,25 @@ Cast is focused on desktop integration of all healthcare applications. It is not
 In addition to distributing FHIRcast events, cast allows the following:
 
  - Request data from applications.
-
- - Support for binary file transfer.
-
- - Support for resource servers and long running jobs.
-
- - Support for conferencing.
-
- - Support for IHE actor naming in advanced message routing.
-
- - Support three additional subscription fields:
+ - File transfer.
+ - Resource servers and long running jobs.
+ - Conferencing.
+ - IHE actor naming in advanced message routing.
+ - Three additional subscription fields:
      - subscriber.product.name,
      - subscriber.product.version,
      - subscriber.actors
-
- - Support four additional event fields:
+ - Four additional event fields:
      - subscriber.name
      - subscriber.actor
      - target.actor
      - target.product.name
 
- - Support for a hub-generated `subscription-removed` event when an application disconnects from the WebSocket.
+ - Additional hub-generated `subscription-removed` event when an application disconnects  from the WebSocket.
 
 
 
-## How does the cast request work?
+## How does the request work?
 
 There is value to being able to obtain real-time information from other applications in the workflow. For example, knowing the "sceneview" status of an Image Display application or the current content of the report editor. This is different than what a FHIRcast hub would know since it relies on getting events to maintain its context which are not generated for each user action.
 
@@ -48,7 +42,7 @@ The following animation shows the added resilience and data exchange that this f
 
 
 
-## How does binary file transfer work?
+## How does file transfer work?
 
 Cast uses a **notify then download** model: the WebSocket carries JSON and a
 `payloadId` per file; file bytes live in the hub’s short-lived HTTP store and
@@ -103,9 +97,9 @@ and stays in sync as the group works together.*
 </p>
 
 
-## How do long running resources integrate in cast?
+## How do long running resources integrate?
 
-Resource servers such as TotalSegmentator connect to the hub like any other Cast
+Resource servers such as TotalSegmentator connect to the hub like any other cast
 client, but their work takes seconds or minutes instead of a single instant
 response. The viewer sends the input study with **dicom-send** (binary batch
 upload through the hub). While the server runs, it publishes **status-update**
