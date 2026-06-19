@@ -2732,12 +2732,24 @@ def _split_store_chunks(raw: bytes, chunk_size: int) -> List[bytes]:
     return [raw[offset : offset + chunk_size] for offset in range(0, len(raw), chunk_size)]
 
 
+def _file_has_publish_url(entry: dict) -> bool:
+    """True when ``files[]`` entry carries an HTTP(S) download URL (no hub upload)."""
+    url = entry.get("url")
+    if not isinstance(url, str):
+        return False
+    u = url.strip().lower()
+    return u.startswith("http://") or u.startswith("https://")
+
+
+def _file_indices_needing_binary_parts(files_meta: List[dict]) -> List[int]:
+    return [idx for idx, entry in enumerate(files_meta) if not _file_has_publish_url(entry)]
+
+
 def _rewrite_files_with_payload_ids(
     notification: dict,
-    blobs: List[bytes],
     file_registrations: List[Optional[Dict[str, Any]]],
 ) -> str:
-    """Build WS text JSON with hub-added ``payloadIds[]`` on each ``context.files[]`` entry."""
+    """Build WS text JSON with hub-added ``payloadIds[]`` on uploaded ``context.files[]`` entries."""
     n2 = copy.deepcopy(notification)
     ev2 = n2.get("event") or {}
     ctx = ev2.get("context")
@@ -2749,15 +2761,14 @@ def _rewrite_files_with_payload_ids(
     for idx, entry in enumerate(files):
         if not isinstance(entry, dict):
             continue
-        raw = blobs[idx] if idx < len(blobs) else b""
         stripped = copy.deepcopy(entry)
         stripped.pop("data", None)
         stripped.pop("binaryTransfer", None)
-        stripped.pop("url", None)
         stripped.pop("payloadId", None)
-        stripped["byteLength"] = len(raw)
         registered = file_registrations[idx] if idx < len(file_registrations) else None
         if registered is not None:
+            stripped.pop("url", None)
+            stripped["byteLength"] = sum(registered["chunkByteLengths"])
             stripped["payloadIds"] = list(registered["payloadIds"])
             stripped["chunkByteLengths"] = list(registered["chunkByteLengths"])
             stripped["expiresAt"] = registered["expiresAt"]
@@ -2771,26 +2782,22 @@ def _rewrite_files_with_payload_ids(
 
 def _prepare_binary_batch_fanout(
     notification: dict,
-    blobs: List[bytes],
+    blobs_by_file_index: Dict[int, bytes],
 ) -> str:
-    """Store each binary batch file (split into chunks) and fan out ``payloadIds[]`` per file."""
+    """Store uploaded binary batch files and fan out ``payloadIds[]`` for those entries only."""
     files = _context_files_from_notification(notification)
-    if len(files) != len(blobs):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"binary batch publish: context.files length {len(files)} "
-                f"does not match DICOM part count {len(blobs)}"
-            ),
-        )
+    if not blobs_by_file_index:
+        return _fanout_metadata_only_binary(notification)
 
     _enforce_binary_transfer_filenames(notification, require_name=True)
 
     chunk_size = CAST_HUB_HTTP_PAYLOAD_STORE_CHUNK_BYTES
-    file_registrations: List[Optional[Dict[str, Any]]] = []
+    file_registrations: List[Optional[Dict[str, Any]]] = [None] * len(files)
     total_chunks = 0
     stored_chunks = 0
-    for idx, raw in enumerate(blobs):
+    for idx, raw in blobs_by_file_index.items():
+        if idx < 0 or idx >= len(files):
+            continue
         entry = files[idx]
         file_name = str(entry.get("fileName") or "").strip()
         mime_type = str(entry.get("mimeType") or "application/dicom").strip()
@@ -2823,18 +2830,16 @@ def _prepare_binary_batch_fanout(
                 f"file={file_name or '(unnamed)'}"
             )
         if file_ok and expires_at is not None:
-            file_registrations.append(
-                {
-                    "payloadIds": payload_ids,
-                    "chunkByteLengths": chunk_byte_lengths,
-                    "expiresAt": expires_at.isoformat(),
-                }
-            )
-        else:
-            file_registrations.append(None)
+            file_registrations[idx] = {
+                "payloadIds": payload_ids,
+                "chunkByteLengths": chunk_byte_lengths,
+                "expiresAt": expires_at.isoformat(),
+            }
 
-    if stored_chunks == total_chunks and all(r is not None for r in file_registrations):
-        return _rewrite_files_with_payload_ids(notification, blobs, file_registrations)
+    if stored_chunks == total_chunks and all(
+        file_registrations[idx] is not None for idx in blobs_by_file_index
+    ):
+        return _rewrite_files_with_payload_ids(notification, file_registrations)
 
     cast_hub.log(
         "binary batch payload store partially unavailable "
@@ -2849,7 +2854,7 @@ def _prepare_binary_batch_fanout(
 def _prepare_websocket_fanout_text(
     notification: dict,
     notification_json: str,
-    predecoded_binary_list: Optional[List[bytes]] = None,
+    predecoded_binary_by_index: Optional[Dict[int, bytes]] = None,
 ) -> str:
     """
     WebSocket fan-out is text-only. binary batch publish publishes store each file and
@@ -2860,8 +2865,8 @@ def _prepare_websocket_fanout_text(
     if not is_cast_binary_event(event.get("hub.event")):
         return notification_json
 
-    if predecoded_binary_list is not None:
-        return _prepare_binary_batch_fanout(notification, predecoded_binary_list)
+    if predecoded_binary_by_index is not None:
+        return _prepare_binary_batch_fanout(notification, predecoded_binary_by_index)
 
     return _fanout_metadata_only_binary(notification)
 
@@ -3083,12 +3088,13 @@ async def _parse_binary_batch_publish(request: Request) -> tuple:
         )
 
     file_parts = parts[1:]
-    if len(file_parts) != len(files_meta):
+    indices_needing_parts = _file_indices_needing_binary_parts(files_meta)
+    if len(file_parts) != len(indices_needing_parts):
         raise HTTPException(
             status_code=400,
             detail=(
-                f"binary batch publish expects {len(files_meta)} file part(s) after JSON, "
-                f"got {len(file_parts)}"
+                f"binary batch publish expects {len(indices_needing_parts)} file part(s) "
+                f"after JSON (files without HTTP URL), got {len(file_parts)}"
             ),
         )
 
@@ -3097,14 +3103,15 @@ async def _parse_binary_batch_publish(request: Request) -> tuple:
         "application/octet-stream",
         "application/vnd.unknown.nifti-1",
     )
-    blobs: List[bytes] = []
-    for idx, (part_ct, raw) in enumerate(file_parts):
+    blobs_by_file_index: Dict[int, bytes] = {}
+    for part_idx, (part_ct, raw) in enumerate(file_parts):
         if not raw:
             raise HTTPException(
-                status_code=400, detail=f"binary batch publish file part {idx} is empty"
+                status_code=400, detail=f"binary batch publish file part {part_idx} is empty"
             )
+        file_idx = indices_needing_parts[part_idx]
         part_ct_lower = part_ct.lower().split(";")[0].strip()
-        entry = files_meta[idx]
+        entry = files_meta[file_idx]
         expected_mime = str(entry.get("mimeType") or "application/octet-stream").strip().lower()
         if expected_mime:
             expected_mime = expected_mime.split(";")[0].strip()
@@ -3114,7 +3121,7 @@ async def _parse_binary_batch_publish(request: Request) -> tuple:
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    f"binary batch publish file part {idx} has unsupported Content-Type "
+                    f"binary batch publish file part {part_idx} has unsupported Content-Type "
                     f"{part_ct!r} (expected {expected_mime or 'application/dicom'})"
                 ),
             )
@@ -3123,14 +3130,14 @@ async def _parse_binary_batch_publish(request: Request) -> tuple:
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    f"binary batch publish file {idx} size {len(raw)} does not match "
-                    f"context.files[{idx}].byteLength {expected}"
+                    f"binary batch publish file {file_idx} size {len(raw)} does not match "
+                    f"context.files[{file_idx}].byteLength {expected}"
                 ),
             )
-        blobs.append(raw)
+        blobs_by_file_index[file_idx] = raw
 
     _enforce_binary_transfer_filenames(notification, require_name=True)
-    return notification, blobs
+    return notification, blobs_by_file_index
 
 
 def _optional_str_field(value: Any) -> Optional[str]:
@@ -3260,7 +3267,7 @@ def _audit_message_params_from_cast_request(
 
 async def _handle_publish_notification(
     notification: dict,
-    predecoded_binary_list: Optional[List[bytes]] = None,
+    predecoded_binary_by_index: Optional[Dict[int, bytes]] = None,
 ):
     """Handle publish notification payload and broadcast to subscribers."""
     notification.pop("subscriber.product.version", None)
@@ -3298,7 +3305,7 @@ async def _handle_publish_notification(
     ws_text = _prepare_websocket_fanout_text(
         notification,
         notification_json,
-        predecoded_binary_list=predecoded_binary_list,
+        predecoded_binary_by_index=predecoded_binary_by_index,
     )
 
     def _audit_context():
@@ -3497,10 +3504,10 @@ async def _handle_multipart_publish(request: Request):
                 "(application/dicom+json manifest + file parts)"
             ),
         )
-    notification, blobs = await _parse_binary_batch_publish(request)
+    notification, blobs_by_file_index = await _parse_binary_batch_publish(request)
     return await _handle_publish_notification(
         notification,
-        predecoded_binary_list=blobs,
+        predecoded_binary_by_index=blobs_by_file_index,
     )
 
 
