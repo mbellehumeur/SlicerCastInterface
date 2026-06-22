@@ -15,6 +15,13 @@ downloads/
 eggs/
 .eggs/
 lib/
+# Slicer extension Python libs (lib/ above matches Lib/ on case-insensitive FS)
+!CastInterface/Lib/
+!CastInterface/Lib/**
+!CastInterface/cast_api/Lib/
+!CastInterface/cast_api/Lib/**
+CastInterface/Lib/__pycache__/
+CastInterface/cast_api/Lib/__pycache__/
 lib64/
 parts/
 sdist/

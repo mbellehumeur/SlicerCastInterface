@@ -1,0 +1,682 @@
+"""Image Display Client hub connection (daemon thread + SlicerCastClient)."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import threading
+from typing import Any, Callable, Dict, List, Optional, TypeVar
+
+from .cast_client import (
+    CastClientOptions,
+    HubConfig,
+    SessionConfig,
+    SlicerCastClient,
+    has_pending_payload,
+    hub_event_name,
+    is_request_event,
+)
+from .cast_conference import normalize_conference_participants
+from .CastResourceServers import HUBS, USER_NAME
+from .image_display_client_handler import (
+    handle_imaging_study_close,
+    handle_imaging_study_open,
+)
+from .resource_server_hub import format_connect_failure
+
+_T = TypeVar("_T")
+
+LOGGER = logging.getLogger("CastInterface.ImageDisplay")
+LOGGER.setLevel(logging.INFO)
+
+DISPLAY_PRODUCT_NAME = "3DSLICER-ID"
+DISPLAY_PRODUCT_VERSION = "1.0"
+DISPLAY_ACTORS = ["ID"]
+DISPLAY_EVENTS = [
+    "imagingstudy-open",
+    "imagingstudy-close",
+    "status-request",
+    "annotation-update",
+    "annotation-delete",
+]
+AUTO_RECONNECT = True
+
+_active_connection: Optional["ImageDisplayClientConnection"] = None
+
+
+def disconnect_image_display_client() -> None:
+    global _active_connection
+    if _active_connection is not None:
+        _active_connection.disconnectHub()
+        _active_connection = None
+
+
+def build_image_display_client(
+    hub_name: str,
+    topic: str,
+    subscriber_name: str,
+    product_name: str,
+    product_version: str,
+) -> SlicerCastClient:
+    if hub_name not in HUBS:
+        raise KeyError(f"Unknown hub {hub_name!r}; choose from {list(HUBS)}")
+
+    hub_def = HUBS[hub_name]
+    hub = HubConfig(
+        hub_endpoint=hub_def["hub_endpoint"],
+        authorization_endpoint=hub_def["authorization_endpoint"],
+        token_endpoint=hub_def["token_endpoint"],
+        client_id=hub_def["client_id"],
+        client_secret=hub_def["client_secret"],
+    )
+    session = SessionConfig(
+        topic=topic,
+        subscriber_name=subscriber_name,
+        product_name=(product_name or "").strip() or DISPLAY_PRODUCT_NAME,
+        product_version=(product_version or "").strip() or DISPLAY_PRODUCT_VERSION,
+        actors=list(DISPLAY_ACTORS),
+        events=list(DISPLAY_EVENTS),
+        lease=int(hub_def["lease"]),
+        user_name=USER_NAME,
+        default_target_actor="ID",
+    )
+    options = CastClientOptions(
+        auto_reconnect=AUTO_RECONNECT,
+        preserve_session_topic_from_token=True,
+    )
+    return SlicerCastClient(hub, session, options)
+
+
+class ImageDisplayClientConnection:
+    """Single Image Display Client hub session."""
+
+    def __init__(
+        self,
+        post_ui: Callable[[Callable[[], None]], None],
+        post_ui_urgent: Callable[[Callable[[], None]], None],
+    ) -> None:
+        self._post_ui = post_ui
+        self._post_ui_urgent = post_ui_urgent
+        self._hub_thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
+        self._want_hub_unsubscribe = False
+        self._hub_subscribed = False
+        self._hub_live = False
+        self._client: Optional[SlicerCastClient] = None
+        self._status_callback: Optional[
+            Callable[[str, Optional[Dict[str, Any]]], None]
+        ] = None
+        self._hub_name = ""
+        self._topic = ""
+        self._subscriber_name = ""
+        self._product_name = ""
+        self._product_version = ""
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._connect_failed = False
+        self._message_count = 0
+        self._last_open_context: list = []
+        self._last_event = ""
+        self._open_study_id = ""
+        self._open_mode = ""
+        self._loaded_node_ids: List[str] = []
+        self._temp_dir = ""
+        self._load_status = ""
+        self._load_error = ""
+        self._open_load_generation = 0
+        self._status_requested = False
+        self._conference_active = False
+        self._conference_title = ""
+        self._conference_participants: List[str] = []
+
+    def isHubThreadRunning(self) -> bool:
+        return self._hub_thread is not None and self._hub_thread.is_alive()
+
+    def isHubConnected(self) -> bool:
+        return self.isHubThreadRunning() and self._hub_live
+
+    def get_message_count(self) -> int:
+        return self._message_count
+
+    def get_last_event(self) -> str:
+        return self._last_event
+
+    def get_open_study_id(self) -> str:
+        return self._open_study_id
+
+    def get_open_mode(self) -> str:
+        return self._open_mode
+
+    def get_load_status(self) -> str:
+        return self._load_status
+
+    def get_load_error(self) -> str:
+        return self._load_error
+
+    def get_loaded_node_ids(self) -> List[str]:
+        return list(self._loaded_node_ids)
+
+    def get_temp_dir(self) -> str:
+        return self._temp_dir
+
+    def get_open_load_generation(self) -> int:
+        return self._open_load_generation
+
+    def next_open_load_generation(self) -> int:
+        """Bump generation so in-flight opens from a prior study are discarded."""
+        self._open_load_generation += 1
+        return self._open_load_generation
+
+    def schedule_main_thread(
+        self, fn: Callable[[], None], *, urgent: bool = False
+    ) -> None:
+        if urgent:
+            self._post_ui_urgent(fn)
+        else:
+            self._post_ui(fn)
+
+    def apply_load_result(self, result: Dict[str, Any]) -> None:
+        self._loaded_node_ids = list(result.get("loaded_node_ids") or [])
+        self._temp_dir = str(result.get("temp_dir") or "").strip()
+        self._load_status = str(result.get("load_status") or "").strip()
+        self._load_error = str(result.get("error") or "").strip()
+
+    def clear_load_state(self) -> None:
+        self._loaded_node_ids = []
+        self._temp_dir = ""
+        self._load_status = ""
+        self._load_error = ""
+
+    def notify_load_finished(self) -> None:
+        if self._status_callback and self.isHubConnected():
+            self._emit_status("connected", self._connected_status_detail())
+
+    def get_subscriber_name(self) -> str:
+        if self._client is None:
+            return ""
+        return (self._client._session_cfg.subscriber_name or "").strip()
+
+    def get_status_detail(self) -> Dict[str, Any]:
+        detail = self._connected_status_detail()
+        detail["last_event"] = self.get_last_event()
+        detail["open_study_id"] = self.get_open_study_id()
+        detail["open_mode"] = self.get_open_mode()
+        detail["load_status"] = self.get_load_status()
+        detail["load_error"] = self.get_load_error()
+        if self._conference_active and self._conference_title:
+            detail["conference_title"] = self._conference_title
+        if self._conference_active and self._conference_participants:
+            detail["conference_participants"] = list(self._conference_participants)
+        return detail
+
+    def get_last_open_context(self) -> List[Any]:
+        return list(self._last_open_context)
+
+    def get_product_name(self) -> str:
+        return (self._product_name or "").strip() or DISPLAY_PRODUCT_NAME
+
+    def get_client(self) -> Optional[SlicerCastClient]:
+        return self._client
+
+    async def run_on_main_thread(self, fn: Callable[[], _T]) -> _T:
+        """Run ``fn`` on the Slicer Qt main thread and await its result."""
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[_T] = loop.create_future()
+
+        def run_and_signal() -> None:
+            try:
+                result = fn()
+            except Exception as exc:
+                loop.call_soon_threadsafe(future.set_exception, exc)
+            else:
+                loop.call_soon_threadsafe(future.set_result, result)
+
+        self.schedule_main_thread(run_and_signal, urgent=True)
+        return await future
+
+    def _reset_event_state(self) -> None:
+        self._last_open_context = []
+        self._last_event = ""
+        self._open_study_id = ""
+        self._open_mode = ""
+        self._open_load_generation = 0
+        self._status_requested = False
+        self._clear_conference_state()
+        self.clear_load_state()
+
+    def _clear_conference_state(self) -> None:
+        self._conference_active = False
+        self._conference_title = ""
+        self._conference_participants = []
+
+    def _set_conference_active(
+        self,
+        active: bool,
+        title: str = "",
+        participants: Optional[List[str]] = None,
+    ) -> None:
+        self._conference_active = active
+        if not active:
+            self._clear_conference_state()
+            return
+        self._conference_title = str(title or "").strip()
+        if participants is not None:
+            self._conference_participants = normalize_conference_participants(
+                participants
+            )
+
+    def _handle_conference_start(self, message: Dict[str, Any]) -> None:
+        event = message.get("event")
+        context = event.get("context") if isinstance(event, dict) else None
+        title = ""
+        participants: List[str] = []
+        if isinstance(context, dict):
+            title = str(context.get("title") or "").strip()
+            participants = normalize_conference_participants(
+                context.get("participants")
+            )
+        self._set_conference_active(True, title, participants)
+        self._emit_status("connected", self._connected_status_detail())
+
+    def _handle_conference_end(self, message: Dict[str, Any]) -> None:
+        event = message.get("event")
+        context = event.get("context") if isinstance(event, dict) else None
+        leave_topic = ""
+        if isinstance(context, dict):
+            leave_topic = str(context.get("leaveTopic") or "").strip()
+        session_topic = self._topic.strip()
+        if not leave_topic or not session_topic or leave_topic == session_topic:
+            self._set_conference_active(False)
+            self._emit_status("connected", self._connected_status_detail())
+
+    def _apply_handler_state(self, state: Dict[str, Any]) -> None:
+        self._last_open_context = list(state.get("last_open_context") or [])
+        self._last_event = str(state.get("last_event") or "").strip()
+        self._open_study_id = str(state.get("open_study_id") or "").strip()
+        self._open_mode = str(state.get("open_mode") or "").strip()
+        if "load_status" in state:
+            self._load_status = str(state.get("load_status") or "").strip()
+        if "load_error" in state:
+            self._load_error = str(state.get("load_error") or "").strip()
+
+    def _connected_status_detail(self) -> Dict[str, Any]:
+        subscriber = ""
+        if self._client is not None:
+            subscriber = (self._client._session_cfg.subscriber_name or "").strip()
+        detail: Dict[str, Any] = {
+            "message_count": self._message_count,
+            "subscriber_name": subscriber,
+        }
+        if self._last_event:
+            detail["last_event"] = self._last_event
+        if self._open_study_id:
+            detail["open_study_id"] = self._open_study_id
+        if self._open_mode:
+            detail["open_mode"] = self._open_mode
+        if self._load_status:
+            detail["load_status"] = self._load_status
+        if self._load_error:
+            detail["load_error"] = self._load_error
+        if self._conference_active and self._conference_title:
+            detail["conference_title"] = self._conference_title
+        if self._conference_active and self._conference_participants:
+            detail["conference_participants"] = list(self._conference_participants)
+        return detail
+
+    def connectHub(
+        self,
+        hub_name: str,
+        topic: str,
+        subscriber_name: str,
+        product_name: str,
+        product_version: str,
+        status_callback: Callable[[str, Optional[Dict[str, Any]]], None],
+    ) -> None:
+        global _active_connection
+
+        if self.isHubThreadRunning():
+            LOGGER.warning("Image Display Client hub thread already running")
+            return
+
+        self._hub_name = hub_name
+        self._topic = topic
+        self._subscriber_name = subscriber_name
+        self._product_name = product_name
+        self._product_version = product_version
+        self._status_callback = status_callback
+        self._want_hub_unsubscribe = False
+        self._hub_subscribed = False
+        self._hub_live = False
+        self._connect_failed = False
+        self._message_count = 0
+        self._status_requested = False
+        self._reset_event_state()
+        self._stop_event.clear()
+
+        _active_connection = self
+
+        self._hub_thread = threading.Thread(
+            target=self._hub_thread_main,
+            name="CastHub-ImageDisplay",
+            daemon=True,
+        )
+        self._hub_thread.start()
+
+    def disconnectHub(self) -> None:
+        global _active_connection
+
+        self._want_hub_unsubscribe = True
+        self._stop_event.set()
+        if self._hub_thread:
+            self._hub_thread.join(timeout=20.0)
+            self._hub_thread = None
+        self._client = None
+        self._hub_subscribed = False
+        self._hub_live = False
+        self._want_hub_unsubscribe = False
+        self._status_callback = None
+        self._reset_event_state()
+        if _active_connection is self:
+            _active_connection = None
+
+    async def _dispatch_image_display_message(
+        self, message: Dict[str, Any]
+    ) -> None:
+        hub_event = hub_event_name(message)
+        if hub_event == "imagingstudy-open":
+            self._apply_handler_state(handle_imaging_study_open(self, message))
+            return
+        if hub_event == "imagingstudy-close":
+            self._apply_handler_state(handle_imaging_study_close(self, message))
+            return
+        if hub_event == "annotation-update":
+            from .image_display_client_annotations import handle_annotation_update
+
+            handle_annotation_update(self, message)
+            return
+        if hub_event == "annotation-delete":
+            from .image_display_client_annotations import handle_annotation_delete
+
+            handle_annotation_delete(self, message)
+            return
+        if hub_event == "conference-start":
+            self._handle_conference_start(message)
+            return
+        if hub_event == "conference-end":
+            self._handle_conference_end(message)
+            return
+        if is_request_event(hub_event):
+            client = self._client
+            if client is None:
+                LOGGER.warning(
+                    "Ignoring request event=%s: hub client unavailable",
+                    hub_event,
+                )
+                return
+            asyncio.create_task(self._handle_cast_request_task(client, message))
+            return
+        LOGGER.debug(
+            "Image Display Client ignoring event=%s id=%s",
+            hub_event,
+            message.get("id"),
+        )
+
+    async def _handle_cast_request_task(
+        self, client: SlicerCastClient, message: Dict[str, Any]
+    ) -> None:
+        hub_event = hub_event_name(message)
+        try:
+            from .image_display_client_requests import handle_cast_request
+
+            await handle_cast_request(self, client, message)
+        except Exception as exc:
+            LOGGER.warning(
+                "Image Display request handler failed event=%s id=%s: %s",
+                hub_event,
+                message.get("id"),
+                exc,
+            )
+
+    async def _request_status_once(self) -> None:
+        if self._status_requested or self._stop_event.is_set():
+            return
+        client = self._client
+        if client is None:
+            return
+        subscriber = self.get_subscriber_name()
+        if not subscriber:
+            return
+
+        self._status_requested = True
+        LOGGER.info(
+            "Image Display Client requesting STATUS from topic=%s subscriber=%s",
+            self._topic,
+            subscriber,
+        )
+        try:
+            result = await client.request(
+                subscriber=subscriber,
+                topic=self._topic or None,
+                data_type="STATUS",
+                actor="ID",
+                target_actor="*",
+            )
+        except Exception as exc:
+            LOGGER.warning(
+                "Image Display STATUS request failed: %s",
+                exc,
+            )
+            return
+
+        if not result.get("ok"):
+            LOGGER.warning(
+                "Image Display STATUS request returned HTTP %s",
+                result.get("status"),
+            )
+            return
+
+        data = result.get("data")
+        if not isinstance(data, dict):
+            return
+
+        responses = data.get("responses")
+        if not isinstance(responses, list):
+            return
+
+        chosen: Optional[Dict[str, Any]] = None
+        for item in responses:
+            if not isinstance(item, dict):
+                continue
+            actor = str(item.get("actor") or "").strip().upper()
+            item_data = item.get("data")
+            if (
+                isinstance(item_data, dict)
+                and item_data.get("context.type") == "ImagingStudy"
+                and (actor == "WORKLIST_CLIENT" or chosen is None)
+            ):
+                chosen = item_data
+                if actor == "WORKLIST_CLIENT":
+                    break
+
+        if not chosen or chosen.get("context.type") != "ImagingStudy":
+            LOGGER.info("Image Display STATUS: no ImagingStudy in responses")
+            return
+
+        context = chosen.get("context")
+        if not isinstance(context, list) or not context:
+            return
+
+        message = {
+            "id": "status-context-sync",
+            "event": {
+                "hub.event": "imagingstudy-open",
+                "hub.topic": self._topic,
+                "context": list(context),
+            },
+        }
+        LOGGER.info(
+            "Image Display opening study from STATUS worklist response (%d context items)",
+            len(context),
+        )
+        self._apply_handler_state(handle_imaging_study_open(self, message))
+        self._emit_status("connected", self._connected_status_detail())
+
+    def _hub_thread_main(self) -> None:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        self._loop = loop
+        try:
+            loop.run_until_complete(self._hub_async_main())
+        except Exception as exc:
+            if not self._connect_failed:
+                reason = format_connect_failure(exc)
+                LOGGER.warning(
+                    "Cannot connect Image Display Client hub=%s: %s",
+                    self._hub_name,
+                    reason,
+                )
+                self._emit_status("failed", {"reason": reason})
+        finally:
+            self._loop = None
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
+            if pending:
+                loop.run_until_complete(
+                    asyncio.gather(*pending, return_exceptions=True)
+                )
+            loop.close()
+
+    def _emit_status(
+        self, state: str, detail: Optional[Dict[str, Any]] = None
+    ) -> None:
+        callback = self._status_callback
+        if not callback:
+            return
+
+        def run() -> None:
+            try:
+                callback(state, detail)
+            except Exception as exc:
+                LOGGER.warning("status callback error: %s", exc)
+
+        self._post_ui(run)
+
+    async def _hub_async_main(self) -> None:
+        self._client = build_image_display_client(
+            self._hub_name,
+            self._topic,
+            self._subscriber_name,
+            self._product_name,
+            self._product_version,
+        )
+        if self._status_callback:
+            initial_sub = (self._client._session_cfg.subscriber_name or "").strip()
+            if initial_sub:
+                self._emit_status("connecting", {"subscriber_name": initial_sub})
+
+        def on_state(state: str, detail: Optional[Dict[str, Any]] = None) -> None:
+            LOGGER.info("Image Display Client connection state: %s", state)
+            if state == "connected":
+                self._hub_live = True
+            elif state in ("disconnected", "reconnecting", "error"):
+                self._hub_live = False
+            if (
+                not self._hub_subscribed
+                and state in ("disconnected", "error", "reconnecting")
+            ):
+                return
+            merged = dict(detail or {})
+            sub = (self._client._session_cfg.subscriber_name or "").strip()
+            if sub:
+                merged.setdefault("subscriber_name", sub)
+            self._emit_status(state, merged or None)
+
+        self._client.on_connection_state_change(on_state)
+
+        try:
+            if self._stop_event.is_set():
+                return
+
+            auth = await self._client.authenticate()
+            LOGGER.info(
+                "Image Display Client authenticated topic=%s user_name=%s",
+                self._topic,
+                auth.get("user_name"),
+            )
+            if self._stop_event.is_set():
+                return
+
+            code = auth.get("code")
+            if not code:
+                raise RuntimeError("authenticate did not return a code")
+            if not await self._client.get_token(code):
+                raise RuntimeError("token exchange failed")
+            if self._stop_event.is_set():
+                return
+
+            status = await self._client.subscribe()
+            if status != 202:
+                if status == 0:
+                    raise RuntimeError(
+                        "subscribe failed (hub unreachable or network error)"
+                    )
+                raise RuntimeError(f"subscribe failed with HTTP {status}")
+            self._hub_subscribed = True
+            subscriber = (self._client._session_cfg.subscriber_name or "").strip()
+            LOGGER.info(
+                "Image Display Client subscribed hub=%s topic=%s subscriber=%s",
+                self._hub_name,
+                self._topic,
+                subscriber,
+            )
+            self._emit_status("connected", self._connected_status_detail())
+            await self._request_status_once()
+
+            while not self._stop_event.is_set():
+                try:
+                    message = await asyncio.wait_for(
+                        self._client.message_queue.get(), timeout=1.0
+                    )
+                except asyncio.TimeoutError:
+                    continue
+
+                self._message_count += 1
+                event = message.get("event") or {}
+                if has_pending_payload(event):
+                    try:
+                        message = await self._client.fetch_all_payloads(message)
+                        event = message.get("event") or {}
+                    except Exception as exc:
+                        LOGGER.warning(
+                            "Image Display fetch_payload failed id=%s: %s",
+                            message.get("id"),
+                            exc,
+                        )
+                        continue
+
+                hub_event = hub_event_name(message)
+                LOGGER.info(
+                    "Image Display Client received event=%s id=%s topic=%s",
+                    hub_event,
+                    message.get("id"),
+                    event.get("hub.topic", ""),
+                )
+                await self._dispatch_image_display_message(message)
+                self._emit_status("connected", self._connected_status_detail())
+        except Exception as exc:
+            self._connect_failed = True
+            reason = format_connect_failure(exc)
+            LOGGER.warning(
+                "Cannot connect Image Display Client hub=%s: %s",
+                self._hub_name,
+                reason,
+            )
+            self._emit_status("failed", {"reason": reason})
+        finally:
+            if self._client:
+                await self._client.close(hub_unsubscribe=self._want_hub_unsubscribe)
+                self._client = None
+            self._hub_subscribed = False
+            self._hub_live = False
+            if not self._connect_failed:
+                self._emit_status("disconnected")
