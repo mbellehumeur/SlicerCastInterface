@@ -1,0 +1,14 @@
+{
+  "id": "NeuroSeg",
+  "name": "Neuro Seg",
+  "description": "T1w brain NIfTI for NEURO_SEG resource-server testing",
+  "format": "NIfTI",
+  "size": "~59 MB",
+  "files": [
+    {
+      "fileName": "118932_T1w.nii.gz",
+      "mimeType": "application/octet-stream",
+      "label": "T1w"
+    }
+  ]
+}
