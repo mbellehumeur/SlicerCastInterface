@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Binary file transfer — Cast</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      color: #1e293b;
+      background: #f8fafc;
+    }
+    main {
+      max-width: 52rem;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 3rem;
+      background: #fff;
+    }
+    h1, h2 { color: #06146b; line-height: 1.25; }
+    h1 { font-size: 1.75rem; margin-top: 0; }
+    a { color: #2457d6; }
+    .diagram {
+      margin: 1.25rem 0;
+      line-height: 0;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(11, 27, 95, 0.08);
+    }
+    .diagram object {
+      display: block;
+      width: 100%;
+      height: auto;
+      border: 0;
+    }
+    .diagram-caption {
+      margin: 0.5rem 0 0;
+      font-size: 0.9rem;
+      color: #64748b;
+    }
+    ol { padding-left: 1.25rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <p><a href="index.html">← Cast Interface documentation</a></p>
+    <h1 id="binary-file-transfer">Cast binary file transfer</h1>
+    <p>
+      Resource Server → Image Display: POST multipart files to the hub, WebSocket
+      metadata fan-out, then GET payload bytes. Click the diagram to play each
+      step (five steps plus restart).
+    </p>
+    <div class="diagram">
+      <object
+        data="images/binary-file-transfer-rs-to-id-interactive.svg"
+        type="image/svg+xml"
+        width="1200"
+        height="700"
+        aria-label="Interactive binary file transfer diagram (Resource Server to Image Display)">
+        <p>
+          Your browser cannot display this interactive SVG.
+          <a href="images/binary-file-transfer-rs-to-id-interactive.svg">Open the SVG directly</a>.
+        </p>
+      </object>
+    </div>
+    <p class="diagram-caption">
+      Steps: multipart POST · hub stores payloadIds · WebSocket notify · GET file bytes · payload TTL expires.
+    </p>
+
+    <p>
+      Cast carries imaging files (DICOM, NIfTI, PNG, NRRD, and similar) through a
+      Cast hub without putting raw bytes on the WebSocket. The hub is a
+      <strong>router</strong> with a short-lived in-memory file store—not a PACS or
+      long-term archive.
+    </p>
+    <p><strong>Two steps for every file:</strong></p>
+    <ol>
+      <li>
+        <strong>Notify</strong> — Publisher sends metadata (and uploads bytes) over HTTP.
+        The hub fans out one text-only WebSocket message listing
+        <code>payloadIds[]</code> per file.
+      </li>
+      <li>
+        <strong>Download</strong> — Each subscriber pulls bytes when ready via
+        <code>GET /api/hub/payloads/&#123;payloadId&#125;</code>, reassembles chunks,
+        and attaches the full file to <code>event.context.files[]</code>.
+      </li>
+    </ol>
+    <p>
+      Full write-up:
+      <a href="https://github.com/mbellehumeur/SlicerCastInterface/blob/main/CastInterface/docs/binary-file-transfer.md">binary-file-transfer.md</a>
+      · Auto-play loop SVG in repo:
+      <a href="https://github.com/mbellehumeur/SlicerCastInterface/blob/main/CastInterface/docs/images/binary-file-transfer-animated-rs-to-id.svg">rs-to-id animated</a>
+    </p>
+  </main>
+</body>
+</html>

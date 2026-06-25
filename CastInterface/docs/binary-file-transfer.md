@@ -1,6 +1,7 @@
 # Cast binary file transfer
 
 Animated walkthrough (30 s loop): [images/binary-file-transfer-animated-rs-to-id.svg](images/binary-file-transfer-animated-rs-to-id.svg) (Resource Server → Image Display).
+**[Interactive step-by-step version (GitHub Pages)](https://mbellehumeur.github.io/SlicerCastInterface/binary-file-transfer.html)** — click to play each step with motion.
 Inbound variant (Image Display → Resource Server): [images/binary-file-transfer-animated.svg](images/binary-file-transfer-animated.svg).
 Static diagram: [images/binary-file-transfer.svg](images/binary-file-transfer.svg).
 

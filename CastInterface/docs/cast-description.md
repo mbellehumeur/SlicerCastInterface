@@ -64,9 +64,12 @@ Resource servers (e.g. TotalSegmentator) receive metadata on the socket, then
 `fetch_all_payloads` fills `files[].data` before your `onMessage` script runs.
 
 Full description: [binary-file-transfer.md](binary-file-transfer.md).
+**[Interactive step-by-step diagram (GitHub Pages)](https://mbellehumeur.github.io/SlicerCastInterface/binary-file-transfer.html)**
 
 <p align="center">
-  <img src="images/binary-file-transfer-animated-rs-to-id.svg" alt="Binary file transfer — result to viewer (animated)" width="100%">
+  <a href="https://mbellehumeur.github.io/SlicerCastInterface/binary-file-transfer.html">
+    <img src="images/binary-file-transfer-animated-rs-to-id.svg" alt="Binary file transfer — result to viewer; click for interactive step-by-step version" width="100%">
+  </a>
 </p>
 
 The hub filename policy is [documented here](filename-policy.md).
