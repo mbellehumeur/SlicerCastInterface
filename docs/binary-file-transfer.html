@@ -4,49 +4,27 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Binary file transfer — Cast</title>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: Arial, Helvetica, sans-serif;
-      font-size: 16px;
-      line-height: 1.6;
-      color: #1e293b;
-      background: #f8fafc;
-    }
-    main {
-      max-width: 52rem;
-      margin: 0 auto;
-      padding: 2rem 1.25rem 3rem;
-      background: #fff;
-    }
-    h1, h2 { color: #06146b; line-height: 1.25; }
-    h1 { font-size: 1.75rem; margin-top: 0; }
-    a { color: #2457d6; }
-    .diagram {
-      margin: 1.25rem 0;
-      line-height: 0;
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 8px 32px rgba(11, 27, 95, 0.08);
-    }
-    .diagram object {
-      display: block;
-      width: 100%;
-      height: auto;
-      border: 0;
-    }
-    .diagram-caption {
-      margin: 0.5rem 0 0;
-      font-size: 0.9rem;
-      color: #64748b;
-    }
-    ol { padding-left: 1.25rem; }
-  </style>
+  <script>
+    (function () {
+      var k = 'cast-pages-mode';
+      var s = localStorage.getItem(k);
+      var m =
+        s === 'light' || s === 'dark'
+          ? s
+          : window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light';
+      document.documentElement.dataset.mode = m;
+    })();
+  </script>
+  <link rel="stylesheet" href="theme.css">
 </head>
 <body>
   <main>
-    <p><a href="index.html">← Cast Interface documentation</a></p>
+    <div class="page-toolbar">
+      <p class="back-link"><a href="index.html">← Cast Interface documentation</a></p>
+      <button type="button" id="theme-toggle" class="theme-toggle">Dark mode</button>
+    </div>
     <h1 id="binary-file-transfer">Cast binary file transfer</h1>
     <p>
       Resource Server → Image Display: POST multipart files to the hub, WebSocket
@@ -96,5 +74,6 @@
       <a href="https://github.com/mbellehumeur/SlicerCastInterface/blob/main/CastInterface/docs/images/binary-file-transfer-animated-rs-to-id.svg">rs-to-id animated</a>
     </p>
   </main>
+  <script src="theme.js"></script>
 </body>
 </html>

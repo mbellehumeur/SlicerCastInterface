@@ -4,58 +4,27 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Cast description</title>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: Arial, Helvetica, sans-serif;
-      font-size: 16px;
-      line-height: 1.6;
-      color: #1e293b;
-      background: #f8fafc;
-    }
-    main {
-      max-width: 52rem;
-      margin: 0 auto;
-      padding: 2rem 1.25rem 3rem;
-      background: #fff;
-    }
-    h1, h2, h3 { color: #06146b; line-height: 1.25; }
-    h1 { font-size: 1.75rem; margin-top: 0; }
-    h3 { font-size: 1.1rem; margin-top: 1.75rem; }
-    a { color: #2457d6; }
-    img { max-width: 100%; height: auto; }
-    ul { padding-left: 1.25rem; }
-    .diagram {
-      margin: 1.25rem 0;
-      line-height: 0;
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 8px 32px rgba(11, 27, 95, 0.08);
-    }
-    .diagram object {
-      display: block;
-      width: 100%;
-      height: auto;
-      border: 0;
-    }
-    .diagram-caption {
-      margin: 0.5rem 0 0;
-      font-size: 0.9rem;
-      color: #64748b;
-      line-height: 1.5;
-    }
-    .figure-caption {
-      font-size: 0.9rem;
-      color: #64748b;
-      line-height: 1.5;
-    }
-    .figure-center { text-align: center; }
-  </style>
+  <script>
+    (function () {
+      var k = 'cast-pages-mode';
+      var s = localStorage.getItem(k);
+      var m =
+        s === 'light' || s === 'dark'
+          ? s
+          : window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light';
+      document.documentElement.dataset.mode = m;
+    })();
+  </script>
+  <link rel="stylesheet" href="theme.css">
 </head>
 <body>
   <main>
-    <p><a href="index.html">← Cast Interface documentation</a></p>
+    <div class="page-toolbar">
+      <p class="back-link"><a href="index.html">← Cast Interface documentation</a></p>
+      <button type="button" id="theme-toggle" class="theme-toggle">Dark mode</button>
+    </div>
     <h1 id="cast-description">Cast description</h1>
     <p>
       Cast is focused on desktop integration of all healthcare applications. It
@@ -284,5 +253,6 @@
         alt="Long running resource — dicom-send, status-update, dicom-send result (animated)">
     </p>
   </main>
+  <script src="theme.js"></script>
 </body>
 </html>
