@@ -187,13 +187,24 @@
     <p>
       Full description:
       <a href="binary-file-transfer.html">binary file transfer</a>.
-      <a href="binary-file-transfer.html">Interactive step-by-step diagram</a>
     </p>
-    <p class="figure-center">
-      <a href="binary-file-transfer.html">
-        <img src="images/binary-file-transfer-animated-rs-to-id.svg"
-          alt="Binary file transfer — result to viewer; click for interactive step-by-step version">
-      </a>
+    <div class="diagram">
+      <object
+        data="images/binary-file-transfer-rs-to-id-interactive.svg"
+        type="image/svg+xml"
+        width="1200"
+        height="700"
+        aria-label="Interactive binary file transfer diagram (Resource Server to Image Display)">
+        <p>
+          Your browser cannot display this interactive SVG.
+          <a href="images/binary-file-transfer-rs-to-id-interactive.svg">Open the SVG directly</a>
+          or see <a href="binary-file-transfer.html">binary file transfer</a>.
+        </p>
+      </object>
+    </div>
+    <p class="diagram-caption">
+      Click to play each step: multipart POST, hub stores payloadIds, WebSocket
+      notify, GET file bytes, payload TTL expires.
     </p>
     <p>
       The hub filename policy is
