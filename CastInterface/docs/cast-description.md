@@ -99,8 +99,12 @@ colleagues on OHIF, VolView, Slim, and 3D Slicer. The hub links their sessions.
 When the host opens a study, the same case appears on every participant’s screen
 and stays in sync as the group works together.*
 
+**[Interactive step-by-step version (GitHub Pages)](https://mbellehumeur.github.io/SlicerCastInterface/images/conference-animated-interactive.svg)** — click to play each step.
+
 <p align="center">
-  <img src="images/conference-animated.svg" alt="Cast conferencing — host invites colleagues and everyone follows the same study (animated)" width="100%">
+  <a href="https://mbellehumeur.github.io/SlicerCastInterface/images/conference-animated-interactive.svg">
+    <img src="images/conference-animated.svg" alt="Cast conferencing — click for interactive step-by-step version" width="100%">
+  </a>
 </p>
 
 

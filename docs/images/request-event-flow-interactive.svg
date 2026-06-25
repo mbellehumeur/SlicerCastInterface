@@ -37,6 +37,12 @@
       #castHubGraphic { transform-origin: 0px 0px; }
       #hubBroadcastArcs { opacity: 0.4; }
       #reqUserWalk { transform-origin: 0 0; transform: translate(840px, 510px); }
+      #reqFlow[data-step="2"] #reqUserWalk,
+      #reqFlow[data-step="3"] #reqUserWalk,
+      #reqFlow[data-step="4"] #reqUserWalk,
+      #reqFlow[data-step="5"] #reqUserWalk {
+        transform: translate(500px, 250px);
+      }
       #reqUserCelebratePose { opacity: 0; }
       #step1Caption, #step4Caption, #step5Caption, #step6Caption,
       #imageDisplayLaunch, #imageDisplay, #statusRequestCaption,
