@@ -14,12 +14,14 @@ Cast Interface is a 3D Slicer extension focused on desktop integration workflows
 
 ## Background
 
-Cast is an offshoot of FHIRcast (<https://fhircast.hl7.org/>). FHIRcast is the standard replacing Epic’s file drop interface for integration with PACS and reporting systems. It provides a secure event messaging infrastructure using a hub with websocket subscriptions. The following animation shows distribution of a FHIRCast ImagingStudy-open event to all applications over low-latency websocket connections.
+Cast is an offshoot of FHIRcast (<https://fhircast.hl7.org/>). FHIRcast is the standard replacing Epic’s file drop interface for integration with PACS and reporting systems. It provides a secure event messaging infrastructure using a hub with websocket subscriptions. The animation below loops automatically in the README; **[open the interactive step-by-step version](https://mbellehumeur.github.io/SlicerCastInterface/imagingstudy-flow.html)** (click to play each step with motion) on GitHub Pages.
 <figure>
   <p align="center">
-    <img src="CastInterface/docs/images/imagingstudy-open-flow.svg"
-         alt="ImagingStudy-open event flow: user selects an exam on the worklist, worklist publishes imagingstudy-open to the hub over HTTP POST, hub fans the event over WebSocket to Image Display, Reporting, and EHR, and each app updates its UI."
-         width="100%">
+    <a href="https://mbellehumeur.github.io/SlicerCastInterface/imagingstudy-flow.html">
+      <img src="CastInterface/docs/images/imagingstudy-open-flow.svg"
+           alt="ImagingStudy-open event flow: user selects an exam on the worklist, worklist publishes imagingstudy-open to the hub over HTTP POST, hub fans the event over WebSocket to Image Display, Reporting, and EHR, and each app updates its UI. Click for interactive step-by-step version."
+           width="100%">
+    </a>
   </p>
 
 </figure>

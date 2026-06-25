@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="1200" height="700" role="img" aria-labelledby="isoTitle isoDesc">
+<svg id="isoFlow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="1200" height="700" data-step="0" role="img" aria-labelledby="isoTitle isoDesc" style="cursor: pointer; max-width: 100%; height: auto;">
   <title id="isoTitle">ImagingStudy-open event flow</title>
-  <desc id="isoDesc">User selects exam on worklist, publishes imagingstudy-open; hub satellite dish broadcasts over WebSocket to Image Display, Reporting, and EHR; apps update together.</desc>
+  <desc id="isoDesc">Click to play each step: worklist selection, HTTPS publish, hub fan-out, and synchronized app updates.</desc>
   <defs>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
       <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#0b1b5f" flood-opacity="0.14"/>
@@ -29,161 +29,185 @@
       .wlValue { font: 9px Arial, Helvetica, sans-serif; fill: #06146b; }
       .wlUserNoteText { font: 700 16px Arial, Helvetica, sans-serif; fill: #06146b; }
       .wlUserNoteSub { font: 600 12px Arial, Helvetica, sans-serif; fill: #334155; }
+      .clickHint { font: 600 14px Arial, Helvetica, sans-serif; fill: #64748b; }
+      .stepDot { fill: #cbd5e1; }
+      .hint { display: none; }
 
-      #wlUserCallout { opacity: 0; animation: wlUserCallout 18s infinite; }
-      @keyframes wlUserCallout {
-        0%, 1.99% { opacity: 0; }
-        2%, 96% { opacity: 1; }
-        96.01%, 100% { opacity: 0; }
-      }
-      #wlUserOpeningFigure { animation: wlUserOpeningFigure 18s infinite; }
-      #wlUserOpeningLabels { animation: wlUserOpeningLabels 18s infinite; }
-      @keyframes wlUserOpeningFigure {
-        0%, 1.99% { opacity: 0; }
-        2%, 41.99% { opacity: 1; }
-        42%, 100% { opacity: 0; }
-      }
-      @keyframes wlUserOpeningLabels {
-        0%, 1.99% { opacity: 0; }
-        2%, 34% { opacity: 1; }
-        34.01%, 100% { opacity: 0; }
-      }
-      #wlUserCelebratePose { opacity: 0; animation: wlUserCelebratePose 18s infinite; }
-      @keyframes wlUserCelebratePose {
-        0%, 41.99% { opacity: 0; }
-        42%, 96% { opacity: 1; }
-        96.01%, 100% { opacity: 0; }
+      #castHubGraphic { transform-origin: 0px 0px; }
+      #hubBroadcastArcs { opacity: 0.4; }
+      #step1Caption, #step2Caption, #step3Caption,
+      #worklistOrder, #wlUserCelebratePose,
+      #linePost, .packetPublish,
+      .packetFanoutImg, .packetFanoutReport, .packetFanoutEhr,
+      #ctResult, #reportResult, #ehrChartResult { opacity: 0; }
+      .packetPublish,
+      .packetFanoutImg, .packetFanoutReport, .packetFanoutEhr {
+        transform: translate(600px, 390px);
       }
 
-      #worklistShell { animation: worklistShell 18s infinite; }
-      #worklistOrder { opacity: 0; animation: worklistOrder 18s infinite; }
-      #wlSelectHighlight { animation: wlSelectHighlight 18s infinite; }
-      @keyframes worklistShell {
-        0%, 17.99% { opacity: 1; }
-        18%, 100% { opacity: 0; }
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+      @keyframes selectPulse {
+        0%, 100% { opacity: 0; }
+        40%, 60% { opacity: 1; }
       }
-      @keyframes worklistOrder {
-        0%, 17.99% { opacity: 0; }
-        18%, 100% { opacity: 1; }
+      @keyframes animPostPacket {
+        0% { opacity: 0; transform: translate(600px, 520px); }
+        8% { opacity: 1; transform: translate(600px, 520px); }
+        75% { opacity: 1; transform: translate(600px, 390px); }
+        100% { opacity: 1; transform: translate(600px, 390px); }
       }
-      @keyframes wlSelectHighlight {
-        0%, 5.99% { opacity: 0; }
-        6%, 16% { opacity: 1; }
-        16.01%, 100% { opacity: 0; }
+      @keyframes animFanoutImg {
+        0% { opacity: 0; transform: translate(600px, 390px); }
+        8% { opacity: 1; transform: translate(600px, 390px); }
+        100% { opacity: 1; transform: translate(600px, 212px); }
       }
-
-      #castHubGraphic { transform-origin: 0px 0px; animation: hubPulse 18s infinite; }
-      @keyframes hubPulse {
-        0%, 25% { transform: scale(1); }
-        27%, 50% { transform: scale(1.06); }
-        52%, 100% { transform: scale(1); }
+      @keyframes animFanoutReport {
+        0% { opacity: 0; transform: translate(600px, 390px); }
+        8% { opacity: 1; transform: translate(600px, 390px); }
+        100% { opacity: 1; transform: translate(985px, 402px); }
       }
-      #hubBroadcastArcs { opacity: 0.4; animation: hubBroadcastArcs 18s infinite; }
-      @keyframes hubBroadcastArcs {
-        0%, 34.99% { opacity: 0.4; }
-        35%, 86% { opacity: 1; }
-        87%, 100% { opacity: 0.4; }
+      @keyframes animFanoutEhr {
+        0% { opacity: 0; transform: translate(600px, 390px); }
+        8% { opacity: 1; transform: translate(600px, 390px); }
+        100% { opacity: 1; transform: translate(215px, 402px); }
       }
-      #step0Caption { animation: step0Caption 18s infinite; }
-      @keyframes step0Caption {
-        0%, 1.99% { opacity: 0; }
-        2%, 17% { opacity: 1; }
-        18%, 100% { opacity: 0; }
+      @keyframes animHubPulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.06); }
       }
-      #step1Caption { animation: step1Caption 18s infinite; }
-      @keyframes step1Caption {
-        0%, 17.99% { opacity: 0; }
-        19%, 34% { opacity: 1; }
-        35%, 100% { opacity: 0; }
-      }
-      #step2Caption { animation: step2Caption 18s infinite; }
-      @keyframes step2Caption {
-        0%, 34.99% { opacity: 0; }
-        35%, 41% { opacity: 1; }
-        42%, 100% { opacity: 0; }
-      }
-      #step3Caption { animation: step3Caption 18s infinite; }
-      @keyframes step3Caption {
-        0%, 41.99% { opacity: 0; }
-        42%, 86% { opacity: 1; }
-        87%, 100% { opacity: 0; }
+      @keyframes animHubArcsBright {
+        from { opacity: 0.4; }
+        to { opacity: 1; }
       }
 
-      #linePost { animation: linePost 18s infinite; }
-      @keyframes linePost {
-        0%, 18.99% { stroke: #1f9d55; opacity: 0; }
-        19%, 34% { stroke: #1f9d55; opacity: 1; }
-        35%, 100% { stroke: #1f9d55; opacity: 0; }
+      #isoFlow[data-step="0"]:not([data-anim]) #wlUserCallout { animation: fadeIn 0.6s ease; }
+      #isoFlow[data-step="0"]:not([data-anim]) #wlSelectHighlight {
+        animation: selectPulse 2.5s ease-in-out infinite;
       }
-      .packetPublish { opacity: 0; animation: packetPublish 18s infinite; }
-      @keyframes packetPublish {
-        0%, 18.99% { opacity: 0; transform: translate(600px, 520px); }
-        19% { opacity: 1; transform: translate(600px, 520px); }
-        27% { opacity: 1; transform: translate(600px, 390px); }
-        29%, 100% { opacity: 0; transform: translate(600px, 390px); }
-      }
-      .packetFanoutImg,
-      .packetFanoutReport,
-      .packetFanoutEhr {
-        opacity: 0;
-        animation-duration: 18s;
-        animation-iteration-count: infinite;
-        animation-timing-function: linear;
-      }
-      .packetFanoutImg {
-        animation-name: packetFanoutOpacity, packetFanoutImg;
-      }
-      .packetFanoutReport {
-        animation-name: packetFanoutOpacity, packetFanoutReport;
-      }
-      .packetFanoutEhr {
-        animation-name: packetFanoutOpacity, packetFanoutEhr;
-      }
-      /* Fan-out: depart hub at 35%, arrive at apps by 42% */
-      @keyframes packetFanoutOpacity {
-        0%, 34.99% { opacity: 0; }
-        35%, 41% { opacity: 1; }
-        42%, 100% { opacity: 0; }
-      }
-      @keyframes packetFanoutImg {
-        0%, 34.99% { transform: translate(600px, 390px); }
-        35% { transform: translate(600px, 390px); }
-        39% { transform: translate(600px, 301px); }
-        42%, 100% { transform: translate(600px, 212px); }
-      }
-      @keyframes packetFanoutReport {
-        0%, 34.99% { transform: translate(600px, 390px); }
-        35% { transform: translate(600px, 390px); }
-        39% { transform: translate(792px, 396px); }
-        42%, 100% { transform: translate(985px, 402px); }
-      }
-      @keyframes packetFanoutEhr {
-        0%, 34.99% { transform: translate(600px, 390px); }
-        35% { transform: translate(600px, 390px); }
-        39% { transform: translate(407px, 396px); }
-        42%, 100% { transform: translate(215px, 402px); }
-      }
+      #isoFlow[data-step="0"] .hint0,
+      #isoFlow[data-step="1"] .hint1,
+      #isoFlow[data-step="2"] .hint2,
+      #isoFlow[data-step="3"] .hint3 { display: block; }
+      #isoFlow[data-step="0"] .stepDot0,
+      #isoFlow[data-step="1"] .stepDot1,
+      #isoFlow[data-step="2"] .stepDot2,
+      #isoFlow[data-step="3"] .stepDot3 { fill: #2457d6; }
 
-      /* All apps flip on the same frame when packets land (42%) */
-      #ctResult,
-      #reportResult,
-      #ehrChartResult {
-        opacity: 0;
-        animation: appsShowResult 18s infinite;
+      #isoFlow[data-step="1"][data-anim] #step0Caption { animation: fadeOut 0.35s forwards; }
+      #isoFlow[data-step="1"][data-anim] #step1Caption { animation: fadeIn 0.35s 0.15s forwards; }
+      #isoFlow[data-step="1"][data-anim] #worklistShell { animation: fadeOut 0.45s forwards; }
+      #isoFlow[data-step="1"][data-anim] #worklistOrder { animation: fadeIn 0.45s 0.2s forwards; }
+      #isoFlow[data-step="1"][data-anim] #wlUserOpeningLabels { animation: fadeOut 0.3s forwards; }
+      #isoFlow[data-step="1"][data-anim] #wlSelectHighlight { animation: fadeOut 0.2s forwards; }
+      #isoFlow[data-step="1"][data-anim] #linePost {
+        animation: fadeIn 0.3s 0.1s forwards;
+        stroke: #1f9d55;
       }
-      #appShellImg,
-      #appShellReport,
-      #appShellEhr {
-        animation: appsHideShell 18s infinite;
-      }
-      @keyframes appsHideShell {
-        0%, 41.99% { opacity: 1; }
-        42%, 100% { opacity: 0; }
-      }
-      @keyframes appsShowResult {
-        0%, 41.99% { opacity: 0; }
-        42%, 100% { opacity: 1; }
-      }
+      #isoFlow[data-step="1"][data-anim] .packetPublish { animation: animPostPacket 1.75s ease forwards; }
+      #isoFlow[data-step="1"][data-anim] #castHubGraphic { animation: animHubPulse 1.75s ease forwards; }
+
+      #isoFlow[data-step="1"]:not([data-anim]) #step1Caption,
+      #isoFlow[data-step="1"]:not([data-anim]) #worklistOrder,
+      #isoFlow[data-step="1"]:not([data-anim]) #wlUserCallout,
+      #isoFlow[data-step="1"]:not([data-anim]) #wlUserOpeningFigure,
+      #isoFlow[data-step="1"]:not([data-anim]) #linePost,
+      #isoFlow[data-step="1"]:not([data-anim]) .packetPublish { opacity: 1; }
+      #isoFlow[data-step="1"]:not([data-anim]) #step0Caption,
+      #isoFlow[data-step="1"]:not([data-anim]) #worklistShell,
+      #isoFlow[data-step="1"]:not([data-anim]) #wlUserOpeningLabels,
+      #isoFlow[data-step="1"]:not([data-anim]) #wlSelectHighlight { opacity: 0; }
+      #isoFlow[data-step="1"]:not([data-anim]) #linePost { stroke: #1f9d55; }
+      #isoFlow[data-step="1"]:not([data-anim]) #castHubGraphic { transform: scale(1.06); }
+      #isoFlow[data-step="1"]:not([data-anim]) .packetPublish { transform: translate(600px, 390px); }
+
+      #isoFlow[data-step="2"][data-anim] #step1Caption { animation: fadeOut 0.3s forwards; }
+      #isoFlow[data-step="2"][data-anim] #step2Caption { animation: fadeIn 0.3s 0.12s forwards; }
+      #isoFlow[data-step="2"][data-anim] .packetPublish { animation: fadeOut 0.25s forwards; }
+      #isoFlow[data-step="2"][data-anim] #linePost { animation: fadeOut 0.25s forwards; }
+      #isoFlow[data-step="2"][data-anim] #castHubGraphic { animation: animHubPulse 1.4s ease forwards; }
+      #isoFlow[data-step="2"][data-anim] #hubBroadcastArcs { animation: animHubArcsBright 0.6s ease forwards; }
+      #isoFlow[data-step="2"][data-anim] .packetFanoutImg { animation: animFanoutImg 1.35s ease forwards; }
+      #isoFlow[data-step="2"][data-anim] .packetFanoutReport { animation: animFanoutReport 1.35s ease forwards; }
+      #isoFlow[data-step="2"][data-anim] .packetFanoutEhr { animation: animFanoutEhr 1.35s ease forwards; }
+
+      #isoFlow[data-step="2"]:not([data-anim]) #step2Caption,
+      #isoFlow[data-step="2"]:not([data-anim]) #worklistOrder,
+      #isoFlow[data-step="2"]:not([data-anim]) #wlUserCallout,
+      #isoFlow[data-step="2"]:not([data-anim]) #wlUserOpeningFigure,
+      #isoFlow[data-step="2"]:not([data-anim]) .packetFanoutImg,
+      #isoFlow[data-step="2"]:not([data-anim]) .packetFanoutReport,
+      #isoFlow[data-step="2"]:not([data-anim]) .packetFanoutEhr { opacity: 1; }
+      #isoFlow[data-step="2"]:not([data-anim]) #hubBroadcastArcs { opacity: 1; }
+      #isoFlow[data-step="2"]:not([data-anim]) #step0Caption,
+      #isoFlow[data-step="2"]:not([data-anim]) #step1Caption,
+      #isoFlow[data-step="2"]:not([data-anim]) #worklistShell,
+      #isoFlow[data-step="2"]:not([data-anim]) #wlUserOpeningLabels,
+      #isoFlow[data-step="2"]:not([data-anim]) #wlSelectHighlight,
+      #isoFlow[data-step="2"]:not([data-anim]) #linePost,
+      #isoFlow[data-step="2"]:not([data-anim]) .packetPublish { opacity: 0; }
+      #isoFlow[data-step="2"]:not([data-anim]) .packetFanoutImg { transform: translate(600px, 212px); }
+      #isoFlow[data-step="2"]:not([data-anim]) .packetFanoutReport { transform: translate(985px, 402px); }
+      #isoFlow[data-step="2"]:not([data-anim]) .packetFanoutEhr { transform: translate(215px, 402px); }
+
+      #isoFlow[data-step="3"][data-anim] #step2Caption { animation: fadeOut 0.3s forwards; }
+      #isoFlow[data-step="3"][data-anim] #step3Caption { animation: fadeIn 0.3s 0.12s forwards; }
+      #isoFlow[data-step="3"][data-anim] .packetFanoutImg,
+      #isoFlow[data-step="3"][data-anim] .packetFanoutReport,
+      #isoFlow[data-step="3"][data-anim] .packetFanoutEhr { animation: fadeOut 0.35s forwards; }
+      #isoFlow[data-step="3"][data-anim] #wlUserOpeningFigure { animation: fadeOut 0.35s forwards; }
+      #isoFlow[data-step="3"][data-anim] #wlUserCelebratePose { animation: fadeIn 0.45s 0.35s forwards; }
+      #isoFlow[data-step="3"][data-anim] #appShellImg,
+      #isoFlow[data-step="3"][data-anim] #appShellReport,
+      #isoFlow[data-step="3"][data-anim] #appShellEhr { animation: fadeOut 0.4s 0.55s forwards; }
+      #isoFlow[data-step="3"][data-anim] #ctResult,
+      #isoFlow[data-step="3"][data-anim] #reportResult,
+      #isoFlow[data-step="3"][data-anim] #ehrChartResult { animation: fadeIn 0.45s 0.6s forwards; }
+
+      #isoFlow[data-step="3"]:not([data-anim]) #step3Caption,
+      #isoFlow[data-step="3"]:not([data-anim]) #worklistOrder,
+      #isoFlow[data-step="3"]:not([data-anim]) #wlUserCallout,
+      #isoFlow[data-step="3"]:not([data-anim]) #wlUserCelebratePose,
+      #isoFlow[data-step="3"]:not([data-anim]) #ctResult,
+      #isoFlow[data-step="3"]:not([data-anim]) #reportResult,
+      #isoFlow[data-step="3"]:not([data-anim]) #ehrChartResult { opacity: 1; }
+      #isoFlow[data-step="3"]:not([data-anim]) #hubBroadcastArcs { opacity: 1; }
+      #isoFlow[data-step="3"]:not([data-anim]) #step0Caption,
+      #isoFlow[data-step="3"]:not([data-anim]) #step1Caption,
+      #isoFlow[data-step="3"]:not([data-anim]) #step2Caption,
+      #isoFlow[data-step="3"]:not([data-anim]) #worklistShell,
+      #isoFlow[data-step="3"]:not([data-anim]) #wlUserOpeningFigure,
+      #isoFlow[data-step="3"]:not([data-anim]) #wlUserOpeningLabels,
+      #isoFlow[data-step="3"]:not([data-anim]) #wlSelectHighlight,
+      #isoFlow[data-step="3"]:not([data-anim]) #linePost,
+      #isoFlow[data-step="3"]:not([data-anim]) .packetPublish,
+      #isoFlow[data-step="3"]:not([data-anim]) .packetFanoutImg,
+      #isoFlow[data-step="3"]:not([data-anim]) .packetFanoutReport,
+      #isoFlow[data-step="3"]:not([data-anim]) .packetFanoutEhr,
+      #isoFlow[data-step="3"]:not([data-anim]) #appShellImg,
+      #isoFlow[data-step="3"]:not([data-anim]) #appShellReport,
+      #isoFlow[data-step="3"]:not([data-anim]) #appShellEhr { opacity: 0; }
+
+      #isoFlow[data-step="0"][data-anim] #step3Caption,
+      #isoFlow[data-step="0"][data-anim] #worklistOrder,
+      #isoFlow[data-step="0"][data-anim] #wlUserCelebratePose,
+      #isoFlow[data-step="0"][data-anim] #ctResult,
+      #isoFlow[data-step="0"][data-anim] #reportResult,
+      #isoFlow[data-step="0"][data-anim] #ehrChartResult,
+      #isoFlow[data-step="0"][data-anim] .packetFanoutImg,
+      #isoFlow[data-step="0"][data-anim] .packetFanoutReport,
+      #isoFlow[data-step="0"][data-anim] .packetFanoutEhr { animation: fadeOut 0.5s forwards; }
+      #isoFlow[data-step="0"][data-anim] #step0Caption,
+      #isoFlow[data-step="0"][data-anim] #worklistShell,
+      #isoFlow[data-step="0"][data-anim] #wlUserCallout,
+      #isoFlow[data-step="0"][data-anim] #wlUserOpeningFigure,
+      #isoFlow[data-step="0"][data-anim] #wlUserOpeningLabels,
+      #isoFlow[data-step="0"][data-anim] #appShellImg,
+      #isoFlow[data-step="0"][data-anim] #appShellReport,
+      #isoFlow[data-step="0"][data-anim] #appShellEhr { animation: fadeIn 0.5s 0.25s forwards; }
+      #isoFlow[data-step="0"][data-anim] #hubBroadcastArcs { animation: fadeOut 0.4s forwards; opacity: 1; }
+
+      #isoFlow[data-anim] { cursor: wait; }
     </style>
   </defs>
 
@@ -417,4 +441,42 @@
     <text x="0" y="-2" text-anchor="middle" class="packetSubWs">WebSocket</text>
     <text x="0" y="11" text-anchor="middle" class="packetText">imagingstudy-open</text>
   </g>
+
+  <g id="clickHint" pointer-events="none">
+    <text x="600" y="682" text-anchor="middle" class="clickHint hint hint0">Click to play · step 1 of 4</text>
+    <text x="600" y="682" text-anchor="middle" class="clickHint hint hint1">Click to play · step 2 of 4</text>
+    <text x="600" y="682" text-anchor="middle" class="clickHint hint hint2">Click to play · step 3 of 4</text>
+    <text x="600" y="682" text-anchor="middle" class="clickHint hint hint3">Click to restart · step 4 of 4</text>
+    <circle class="stepDot stepDot0" cx="520" cy="688" r="5"/>
+    <circle class="stepDot stepDot1" cx="540" cy="688" r="5"/>
+    <circle class="stepDot stepDot2" cx="560" cy="688" r="5"/>
+    <circle class="stepDot stepDot3" cx="580" cy="688" r="5"/>
+  </g>
+
+  <script><![CDATA[
+    (function () {
+      var root = document.getElementById('isoFlow');
+      var step = 0;
+      var busy = false;
+      var DURATION = { 0: 750, 1: 1750, 2: 1400, 3: 1100 };
+
+      function play(next) {
+        busy = true;
+        step = next;
+        root.setAttribute('data-step', String(next));
+        root.setAttribute('data-anim', '1');
+        window.setTimeout(function () {
+          root.removeAttribute('data-anim');
+          busy = false;
+        }, DURATION[next]);
+      }
+
+      root.addEventListener('click', function () {
+        if (busy) {
+          return;
+        }
+        play((step + 1) % 4);
+      });
+    })();
+  ]]></script>
 </svg>
