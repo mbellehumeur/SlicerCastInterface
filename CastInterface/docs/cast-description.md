@@ -36,7 +36,7 @@ The following animation shows the added resilience and data exchange that this f
 
 *Animation description: The user is reviewing a report on his tablet and walks over to the workstation to view the images. The application is launched without context. The application sends a request event to find which study to load from the worklist client and then queries the reporting client to get the measurements in the template. The measurements are used to populate annotation labeling drop-down in the image display tools.*
 
-**[Interactive step-by-step version (GitHub Pages)](https://mbellehumeur.github.io/SlicerCastInterface/#cast-description)** — click the request-event diagram to play each step.
+**[Interactive step-by-step version (GitHub Pages)](https://mbellehumeur.github.io/SlicerCastInterface/images/request-event-flow-interactive.svg)** — click to play each step.
 
 <p align="center">
   <a href="https://mbellehumeur.github.io/SlicerCastInterface/images/request-event-flow-interactive.svg">

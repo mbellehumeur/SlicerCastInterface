@@ -12,7 +12,7 @@ Cast Interface is a 3D Slicer extension for desktop integration workflows — Ca
 
 - [Interactive ImagingStudy-open flow](https://mbellehumeur.github.io/SlicerCastInterface/#imagingstudy-flow) — click to play each step
 - [Interactive binary file transfer (RS → viewer)](https://mbellehumeur.github.io/SlicerCastInterface/binary-file-transfer.html)
-- [Cast description](CastInterface/docs/cast-description.md)
+- [Cast description](https://mbellehumeur.github.io/SlicerCastInterface/cast-description.html)
 - [Worklist demo (Azure)](https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/worklist-client/examples/CastClient/index.html)
 
 ## Install
