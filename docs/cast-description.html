@@ -35,21 +35,25 @@
     <ul>
       <li>Request data from applications.</li>
       <li>File transfer.</li>
-      <li>Resource servers and long running jobs.</li>
+      <li>Resource servers with long running jobs.</li>
       <li>Conferencing.</li>
-      <li>IHE actor naming in advanced message routing.</li>
+      <li>IHE actor naming for advanced message routing.</li>
       <li>
         Three additional subscription fields:
-        <code>subscriber.product.name</code>,
-        <code>subscriber.product.version</code>,
-        <code>subscriber.actors</code>
+        <ul>
+          <li><code>subscriber.product.name</code></li>
+          <li><code>subscriber.product.version</code></li>
+          <li><code>subscriber.actors</code></li>
+        </ul>
       </li>
       <li>
         Four additional event fields:
-        <code>subscriber.name</code>,
-        <code>subscriber.actor</code>,
-        <code>target.actor</code>,
-        <code>target.product.name</code>
+        <ul>
+          <li><code>subscriber.name</code></li>
+          <li><code>subscriber.actor</code></li>
+          <li><code>target.actor</code></li>
+          <li><code>target.product.name</code></li>
+        </ul>
       </li>
       <li>
         Additional hub-generated <code>subscription-removed</code> event when an
@@ -93,6 +97,10 @@
       queries the reporting client to get the measurements in the template. The
       measurements are used to populate annotation labeling drop-down in the
       image display tools.
+    </p>
+    <p>
+      <strong><a href="images/request-event-flow-interactive.svg">Interactive step-by-step version</a></strong>
+      — click to play each step.
     </p>
     <div class="diagram">
       <object
@@ -157,6 +165,9 @@
       Full description:
       <a href="binary-file-transfer.html">binary file transfer</a>.
     </p>
+    <p>
+      <strong><a href="binary-file-transfer.html">Interactive step-by-step diagram</a></strong>
+    </p>
     <div class="diagram">
       <object
         data="images/binary-file-transfer-rs-to-id-interactive.svg"
@@ -205,6 +216,10 @@
       The hub links their sessions. When the host opens a study, the same case
       appears on every participant&rsquo;s screen and stays in sync as the group
       works together.
+    </p>
+    <p>
+      <strong><a href="images/conference-animated-interactive.svg">Interactive step-by-step version</a></strong>
+      — click to play each step.
     </p>
     <div class="diagram">
       <object

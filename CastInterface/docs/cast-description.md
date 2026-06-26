@@ -6,9 +6,9 @@ In addition to distributing FHIRcast events, cast allows the following:
 
  - Request data from applications.
  - File transfer.
- - Resource servers and long running jobs.
+ - Resource servers with long running jobs.
  - Conferencing.
- - IHE actor naming in advanced message routing.
+ - IHE actor naming for advanced message routing.
  - Three additional subscription fields:
      - subscriber.product.name,
      - subscriber.product.version,
