@@ -4,7 +4,7 @@
   <img src="CastInterface/docs/images/banner.png" alt="Cast Interface Banner" width="100%">
 </p>
 
-Cast Interface is a 3D Slicer extension for desktop integration workflows — Cast hub, resource servers (e.g. Total Segmentator), and an Image Display client for FHIRcast-style events over WebSockets.
+Cast Interface is a 3D Slicer extension for desktop integration workflows — Cast hub, resource servers and an Image Display client for FHIRcast-style events over WebSockets.
 
 **[Full documentation →](https://mbellehumeur.github.io/SlicerCastInterface/)**
 
